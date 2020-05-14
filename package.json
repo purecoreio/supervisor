@@ -1,0 +1,22 @@
+{
+  "name": "supervisor",
+  "version": "1.0.0",
+  "description": "",
+  "main": "supervisor.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "author": "quiquelhappy",
+  "license": "ISC",
+  "dependencies": {
+    "benchmark": "^2.1.4",
+    "colors": "^1.4.0",
+    "inquirer": "^7.0.2",
+    "microtime": "^3.0.0",
+    "node-fetch": "^2.6.0",
+    "public-ip": "^4.0.0",
+    "purecore": "^1.2.12",
+    "socket.io": "^2.3.0",
+    "systeminformation": "^4.17.2"
+  }
+}
