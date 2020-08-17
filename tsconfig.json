@@ -1,0 +1,10 @@
+{
+  "compilerOptions": {
+    "emitDecoratorMetadata": false,
+    "module": "amd",
+    "target": "es6",
+    "outFile": "target/supervisor.js",
+    "rootDir": "src",
+    "esModuleInterop": true
+  }
+}
