@@ -10,7 +10,9 @@ class SocketServer {
     public getSocket(server) {
         return new socketio(server).on('connection', client => {
             Supervisor.emitter.emit('clientConnected');
-            client.on('event', data => { /* … */ });
+            client.on('host', hostRequest => {
+                DockerHelper.createContainer(hostRequest)
+            });
             client.on('disconnect', () => { Supervisor.emitter.emit('clientDisconnected'); });
         })
     }

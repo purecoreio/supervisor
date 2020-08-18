@@ -7,6 +7,10 @@ supervisor.getEmitter().on("loadingMachine", () => {
     ConsoleUtil.setLoading(true, "Loading machine")
 }).on("gotMachine", () => {
     ConsoleUtil.setLoading(false, "Got machine", false)
+}).on("dockerComError", () => {
+    ConsoleUtil.setLoading(false, "Couldn't communicate with docker, please, make sure Docker is running and that you are running this tool as 'sudo'", true)
+}).on("dockerComStart", () => {
+    ConsoleUtil.setLoading(false, "Created Docker interface", false, false, true)
 }).on("errorGettingMachine", (err) => {
     ConsoleUtil.setLoading(false, "Error while loading the machine: " + err.message, true)
     ConsoleUtil.askHash().then((hash) => {
@@ -70,6 +74,16 @@ supervisor.getEmitter().on("loadingMachine", () => {
     ConsoleUtil.setLoading(false, "Client connected", false, false, true)
 }).on("clientDisconnected", () => {
     ConsoleUtil.setLoading(false, "Client disconnected", false, false, true)
+}).on("creatingContainer", () => {
+    ConsoleUtil.setLoading(true, "Creating a new container", false)
+}).on("createdContainer", () => {
+    ConsoleUtil.setLoading(false, "Created a new container", false)
+}).on("startingNewContainer", () => {
+    ConsoleUtil.setLoading(true, "Starting new container", false)
+}).on("startedNewContainer", () => {
+    ConsoleUtil.setLoading(false, "Started new container", false)
+}).on("containerCreationError", (err) => {
+    ConsoleUtil.setLoading(false, "Error while creating creating container: " + err.message, true)
 })
 
 supervisor.setup();

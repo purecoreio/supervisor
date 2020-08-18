@@ -1,4 +1,3 @@
-const dockerode = require('dockerode');
 const fs = require('fs');
 const cryptotool = require("crypto");
 
@@ -10,8 +9,7 @@ class Correlativity {
     static updateFolders(): Promise<void> {
         return new Promise(function (resolve, reject) {
             try {
-                var docker = new dockerode();
-                docker.listContainers({ all: true }, function (err, containers) {
+                Supervisor.docker.listContainers({ all: true }, function (err, containers) {
                     let existingContainers = [];
 
                     if (containers == null) { reject() } else {
@@ -65,7 +63,7 @@ class Correlativity {
                         existingContainers.forEach(containerInfo => {
                             if (!folders.includes(containerInfo.name)) {
                                 actionsToTake++;
-                                docker.getContainer(containerInfo.id).remove({
+                                Supervisor.docker.getContainer(containerInfo.id).remove({
                                     force: true
                                 }, (err) => {
                                     actionsToTake += -1;

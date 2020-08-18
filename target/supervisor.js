@@ -9,6 +9,7 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
 };
 const core = require('purecore');
 const EventEmitter = require('events');
+const dockerode = require('dockerode');
 class Supervisor {
     constructor(hash) {
         if (Supervisor.hash != hash && hash != null) {
@@ -23,6 +24,15 @@ class Supervisor {
     setup(hash) {
         return __awaiter(this, void 0, void 0, function* () {
             let main = this;
+            try {
+                if (Supervisor.docker == null) {
+                    Supervisor.emitter.emit('dockerComStart');
+                    Supervisor.docker = new dockerode();
+                }
+            }
+            catch (error) {
+                Supervisor.emitter.emit('dockerComError');
+            }
             if (hash != null) {
                 yield MachineSettings.setHash(hash).catch(() => {
                     Supervisor.emitter.emit('hashSavingError');
@@ -90,11 +100,11 @@ class Supervisor {
 }
 // events
 Supervisor.emitter = new EventEmitter();
+Supervisor.docker = null;
 // actual props
 Supervisor.hash = null;
 Supervisor.ready = false;
 module.exports.Supervisor = Supervisor;
-const dockerode = require('dockerode');
 const fs = require('fs');
 const cryptotool = require("crypto");
 class Correlativity {
@@ -104,8 +114,7 @@ class Correlativity {
     static updateFolders() {
         return new Promise(function (resolve, reject) {
             try {
-                var docker = new dockerode();
-                docker.listContainers(function (err, containers) {
+                Supervisor.docker.listContainers({ all: true }, function (err, containers) {
                     let existingContainers = [];
                     if (containers == null) {
                         reject();
@@ -163,7 +172,7 @@ class Correlativity {
                         existingContainers.forEach(containerInfo => {
                             if (!folders.includes(containerInfo.name)) {
                                 actionsToTake++;
-                                docker.getContainer(containerInfo.id).remove({
+                                Supervisor.docker.getContainer(containerInfo.id).remove({
                                     force: true
                                 }, (err) => {
                                     actionsToTake += -1;
@@ -330,6 +339,31 @@ ConsoleUtil.loadingInterval = null;
 ConsoleUtil.loadingStep = 0;
 ConsoleUtil.character = null;
 module.exports.ConsoleUtil = ConsoleUtil;
+class DockerHelper {
+    static createContainer(hostRequest) {
+        return new Promise(function (resolve, reject) {
+            Supervisor.emitter.emit('creatingContainer');
+            Supervisor.docker.createContainer({
+                Image: hostRequest.image, name: 'core-' + hostRequest.uuid, Env: [
+                    "EULA=true",
+                ], HostConfig: {
+                    PortBindings: { '25565/tcp': [{ HostPort: String(hostRequest.port) }] },
+                },
+            }).then((container) => {
+                Supervisor.emitter.emit('createdContainer');
+                Supervisor.emitter.emit('startingNewContainer');
+                container.start().then(() => {
+                    Supervisor.emitter.emit('startedNewContainer');
+                    resolve();
+                });
+            }).catch((error) => {
+                Supervisor.emitter.emit('containerCreationError: ', error);
+                reject();
+            });
+        });
+    }
+}
+DockerHelper.hostingFolder = "/opt/purecore/hosted/";
 class LiteEvent {
     constructor() {
         this.handlers = [];
@@ -362,7 +396,9 @@ class SocketServer {
     getSocket(server) {
         return new socketio(server).on('connection', client => {
             Supervisor.emitter.emit('clientConnected');
-            client.on('event', data => { });
+            client.on('host', hostRequest => {
+                DockerHelper.createContainer(hostRequest);
+            });
             client.on('disconnect', () => { Supervisor.emitter.emit('clientDisconnected'); });
         });
     }

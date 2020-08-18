@@ -1,10 +1,12 @@
 const core = require('purecore');
 const EventEmitter = require('events');
+const dockerode = require('dockerode');
 
 class Supervisor {
 
     // events
     public static emitter = new EventEmitter();
+    public static docker = null;
 
     // actual props
     public static hash: string = null;
@@ -25,6 +27,16 @@ class Supervisor {
 
     public async setup(hash?: string) {
         let main = this;
+
+        try {
+            if (Supervisor.docker == null) {
+                Supervisor.emitter.emit('dockerComStart')
+                Supervisor.docker = new dockerode();
+            }
+        } catch (error) {
+            Supervisor.emitter.emit('dockerComError')
+        }
+
 
         if (hash != null) {
             await MachineSettings.setHash(hash).catch(() => {
