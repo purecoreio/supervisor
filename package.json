@@ -16,7 +16,8 @@
   },
   "devDependencies": {},
   "scripts": {
-    "start": "sudo node index.js"
+    "start": "node index.js",
+    "build": "tsc"
   },
   "author": "",
   "license": "ISC"
