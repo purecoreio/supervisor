@@ -56,8 +56,8 @@ supervisor.getEmitter().on("loadingMachine", () => {
     ConsoleUtil.setLoading(true, "Creating socket server", false)
 }).on("createdSocketServer", () => {
     ConsoleUtil.setLoading(false, "Created socket server", false)
-}).on("errorCreatingServer", () => {
-    ConsoleUtil.setLoading(false, "Error while creating socket server", true)
+}).on("errorCreatingSocketServer", (err) => {
+    ConsoleUtil.setLoading(false, "Error while creating socket server: " + err.message, true)
 }).on("clientConnected", () => {
     ConsoleUtil.setLoading(false, "Client connected", false, false, true)
 }).on("clientDisconnected", () => {

@@ -330,8 +330,11 @@ class SocketServer {
             try {
                 Supervisor.emitter.emit('creatingSocketServer');
                 SocketServer.io = this.getSocket(server);
-                server.listen(31518);
-                Supervisor.emitter.emit('createdSocketServer');
+                server.listen(31518, () => {
+                    Supervisor.emitter.emit('createdSocketServer');
+                }).on('error', function (error) {
+                    Supervisor.emitter.emit('errorCreatingSocketServer', new Error(error.code));
+                });
             }
             catch (error) {
                 Supervisor.emitter.emit('errorCreatingSocketServer', error);
