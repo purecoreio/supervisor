@@ -11,20 +11,21 @@ const core = require('purecore');
 const EventEmitter = require('events');
 class Supervisor {
     constructor(hash) {
-        // events
-        this.emitter = new EventEmitter();
         if (Supervisor.hash != hash && hash != null) {
             MachineSettings.getHash().then((hash) => {
                 Supervisor.hash = hash;
             });
         }
     }
+    getEmitter() {
+        return Supervisor.emitter;
+    }
     setup(hash) {
         return __awaiter(this, void 0, void 0, function* () {
             let main = this;
             if (hash != null) {
                 yield MachineSettings.setHash(hash).catch(() => {
-                    main.emitter.emit('hashSavingError');
+                    Supervisor.emitter.emit('hashSavingError');
                 });
                 Supervisor.hash = hash;
             }
@@ -32,25 +33,31 @@ class Supervisor {
                 yield MachineSettings.getHash().then((storedHash) => {
                     Supervisor.hash = storedHash;
                 }).catch(() => {
-                    main.emitter.emit('hashLoadingError');
+                    Supervisor.emitter.emit('hashLoadingError');
                 });
             }
-            main.emitter.emit('loadingMachine');
+            Supervisor.emitter.emit('loadingMachine');
             new core().getMachine(Supervisor.hash).then((machine) => {
-                main.emitter.emit('gotMachine');
+                Supervisor.emitter.emit('gotMachine');
                 Supervisor.machine = machine;
                 main.IOCheck().then(() => {
-                    main.emitter.emit('checkingCorrelativity');
+                    Supervisor.emitter.emit('checkingCorrelativity');
                     Correlativity.updateFolders().then(() => {
-                        main.emitter.emit('checkedCorrelativity');
+                        Supervisor.emitter.emit('checkedCorrelativity');
+                        try {
+                            new SocketServer().setup();
+                        }
+                        catch (error) {
+                            Supervisor.emitter.emit('errorSettingUpSockets');
+                        }
                     }).catch(() => {
-                        main.emitter.emit('errorCheckingCorrelativity');
+                        Supervisor.emitter.emit('errorCheckingCorrelativity');
                     });
                 }).catch((err) => {
                     // can't complete the setup process
                 });
             }).catch((err) => {
-                main.emitter.emit('errorGettingMachine', err);
+                Supervisor.emitter.emit('errorGettingMachine', err);
             });
         });
     }
@@ -63,24 +70,26 @@ class Supervisor {
     IOCheck() {
         let main = this;
         return new Promise(function (resolve, reject) {
-            main.emitter.emit('pushingHardware');
+            Supervisor.emitter.emit('pushingHardware');
             HardwareCheck.updateComponents().then(() => {
-                main.emitter.emit('pushedHardware');
-                main.emitter.emit('pushingNetwork');
+                Supervisor.emitter.emit('pushedHardware');
+                Supervisor.emitter.emit('pushingNetwork');
                 NetworkCheck.updateNetwork().then(() => {
-                    main.emitter.emit('pushedNetwork');
+                    Supervisor.emitter.emit('pushedNetwork');
                     resolve();
                 }).catch((err) => {
-                    main.emitter.emit('errorPushingNetwork');
+                    Supervisor.emitter.emit('errorPushingNetwork');
                     reject(err);
                 });
             }).catch((err) => {
-                main.emitter.emit('errorPushingHardware');
+                Supervisor.emitter.emit('errorPushingHardware');
                 reject(err);
             });
         });
     }
 }
+// events
+Supervisor.emitter = new EventEmitter();
 // actual props
 Supervisor.hash = null;
 Supervisor.ready = false;
@@ -224,7 +233,7 @@ class ConsoleUtil {
             });
         });
     }
-    static setLoading(loading, string, failed = false) {
+    static setLoading(loading, string, failed = false, warning = false, info = false) {
         if (loading) {
             ConsoleUtil.loadingInterval = setInterval(() => {
                 ConsoleUtil.loadingStep++;
@@ -252,11 +261,21 @@ class ConsoleUtil {
             clearInterval(ConsoleUtil.loadingInterval);
             process.stdout.clearLine(0);
             process.stdout.cursorTo(0);
-            if (!failed) {
-                process.stdout.write(colors.bgGreen(" ✓ ") + colors.green(" " + string));
+            if (!info) {
+                if (!warning) {
+                    if (!failed) {
+                        process.stdout.write(colors.bgGreen(" ✓ ") + colors.green(" " + string));
+                    }
+                    else {
+                        process.stdout.write(colors.bgRed(" ☓ ") + colors.red(" " + string));
+                    }
+                }
+                else {
+                    process.stdout.write(colors.bgYellow(colors.black(" ⚠ ")) + colors.yellow(" " + string));
+                }
             }
             else {
-                process.stdout.write(colors.bgRed(" ☓ ") + colors.red(" " + string));
+                process.stdout.write(colors.bgBlue(" ℹ ") + colors.blue(" " + string));
             }
             process.stdout.write("\n");
             process.stdout.cursorTo(0);
@@ -282,6 +301,90 @@ class LiteEvent {
     }
     expose() {
         return this;
+    }
+}
+class Cert {
+    constructor(key, cert, ca) {
+        this.key = key;
+        this.key = cert;
+        this.ca = ca;
+    }
+}
+const http = require('http');
+const https = require('https');
+const socketio = require('socket.io');
+const app = require('express')();
+class SocketServer {
+    getSocket(server) {
+        return new socketio(server).on('connection', client => {
+            Supervisor.emitter.emit('clientConnected');
+            client.on('event', data => { });
+            client.on('disconnect', () => { Supervisor.emitter.emit('clientDisconnected'); });
+        });
+    }
+    setup() {
+        try {
+            Supervisor.emitter.emit('creatingServer');
+            const server = this.getHTTP();
+            Supervisor.emitter.emit('createdServer');
+            try {
+                Supervisor.emitter.emit('creatingSocketServer');
+                SocketServer.io = this.getSocket(server);
+                server.listen(31518);
+                Supervisor.emitter.emit('createdSocketServer');
+            }
+            catch (error) {
+                Supervisor.emitter.emit('errorCreatingSocketServer', error);
+            }
+        }
+        catch (error) {
+            Supervisor.emitter.emit('errorCreatingServer', error);
+        }
+    }
+    getHTTP() {
+        let httpServer = null;
+        const cert = this.getCert();
+        if (cert != null) {
+            Supervisor.emitter.emit('certUse');
+            httpServer = https.Server({
+                key: cert.key,
+                cert: cert.cert,
+                ca: cert.ca
+            }, app);
+        }
+        else {
+            Supervisor.emitter.emit('certUnknown');
+        }
+        if (httpServer == null) {
+            httpServer = http.Server(app);
+        }
+        return httpServer;
+    }
+    getCert() {
+        Supervisor.emitter.emit('certLoading');
+        const fs = require("fs");
+        const letsencryptBase = "/etc/letsencrypt/";
+        try {
+            if (fs.existsSync(letsencryptBase) && fs.existsSync(letsencryptBase + "live/")) {
+                var folders = fs.readdirSync(letsencryptBase + "live/").filter((dirent) => dirent.isDirectory());
+                if (folders != null && Array.isArray(folders) && folders.length > 0) {
+                    Supervisor.emitter.emit('certFound');
+                    return new Cert(fs.readFileSync(letsencryptBase + "live/" + folders[0].name + "/privkey.pem"), fs.readFileSync(letsencryptBase + "live/" + folders[0].name + "/cert.pem"), fs.readFileSync(letsencryptBase + "live/" + folders[0].name + "/chain.pem"));
+                }
+                else {
+                    Supervisor.emitter.emit('certNotSetup');
+                    return null;
+                }
+            }
+            else {
+                Supervisor.emitter.emit('certNotInstalled');
+                return null;
+            }
+        }
+        catch (error) {
+            Supervisor.emitter.emit('certReadingError');
+            return null;
+        }
     }
 }
 class MachineSettings {

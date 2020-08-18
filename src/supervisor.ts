@@ -4,7 +4,7 @@ const EventEmitter = require('events');
 class Supervisor {
 
     // events
-    public emitter = new EventEmitter();
+    public static emitter = new EventEmitter();
 
     // actual props
     public static hash: string = null;
@@ -19,38 +19,47 @@ class Supervisor {
         }
     }
 
+    public getEmitter(): any {
+        return Supervisor.emitter;
+    }
+
     public async setup(hash?: string) {
         let main = this;
 
         if (hash != null) {
             await MachineSettings.setHash(hash).catch(() => {
-                main.emitter.emit('hashSavingError');
+                Supervisor.emitter.emit('hashSavingError');
             })
             Supervisor.hash = hash;
         } else {
             await MachineSettings.getHash().then((storedHash) => {
                 Supervisor.hash = storedHash;
             }).catch(() => {
-                main.emitter.emit('hashLoadingError');
+                Supervisor.emitter.emit('hashLoadingError');
             })
         }
 
-        main.emitter.emit('loadingMachine');
+        Supervisor.emitter.emit('loadingMachine');
         new core().getMachine(Supervisor.hash).then((machine) => {
-            main.emitter.emit('gotMachine')
+            Supervisor.emitter.emit('gotMachine')
             Supervisor.machine = machine;
             main.IOCheck().then(() => {
-                main.emitter.emit('checkingCorrelativity');
+                Supervisor.emitter.emit('checkingCorrelativity');
                 Correlativity.updateFolders().then(() => {
-                    main.emitter.emit('checkedCorrelativity');
+                    Supervisor.emitter.emit('checkedCorrelativity');
+                    try {
+                        new SocketServer().setup();
+                    } catch (error) {
+                        Supervisor.emitter.emit('errorSettingUpSockets');
+                    }
                 }).catch(() => {
-                    main.emitter.emit('errorCheckingCorrelativity');
+                    Supervisor.emitter.emit('errorCheckingCorrelativity');
                 })
             }).catch((err) => {
                 // can't complete the setup process
             })
         }).catch((err) => {
-            main.emitter.emit('errorGettingMachine', err)
+            Supervisor.emitter.emit('errorGettingMachine', err)
         })
     }
 
@@ -68,20 +77,20 @@ class Supervisor {
 
         return new Promise(function (resolve, reject) {
 
-            main.emitter.emit('pushingHardware');
+            Supervisor.emitter.emit('pushingHardware');
 
             HardwareCheck.updateComponents().then(() => {
-                main.emitter.emit('pushedHardware');
-                main.emitter.emit('pushingNetwork');
+                Supervisor.emitter.emit('pushedHardware');
+                Supervisor.emitter.emit('pushingNetwork');
                 NetworkCheck.updateNetwork().then(() => {
-                    main.emitter.emit('pushedNetwork');
+                    Supervisor.emitter.emit('pushedNetwork');
                     resolve();
                 }).catch((err) => {
-                    main.emitter.emit('errorPushingNetwork');
+                    Supervisor.emitter.emit('errorPushingNetwork');
                     reject(err);
                 })
             }).catch((err) => {
-                main.emitter.emit('errorPushingHardware');
+                Supervisor.emitter.emit('errorPushingHardware');
                 reject(err);
             })
         });

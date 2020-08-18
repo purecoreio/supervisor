@@ -41,7 +41,7 @@ class ConsoleUtil {
 
     }
 
-    public static setLoading(loading, string, failed = false) {
+    public static setLoading(loading, string, failed = false, warning = false, info = false) {
 
         if (loading) {
 
@@ -77,10 +77,18 @@ class ConsoleUtil {
             process.stdout.clearLine(0)
             process.stdout.cursorTo(0)
 
-            if (!failed) {
-                process.stdout.write(colors.bgGreen(" ✓ ") + colors.green(" " + string))
+            if (!info) {
+                if (!warning) {
+                    if (!failed) {
+                        process.stdout.write(colors.bgGreen(" ✓ ") + colors.green(" " + string))
+                    } else {
+                        process.stdout.write(colors.bgRed(" ☓ ") + colors.red(" " + string))
+                    }
+                } else {
+                    process.stdout.write(colors.bgYellow(colors.black(" ⚠ ")) + colors.yellow(" " + string))
+                }
             } else {
-                process.stdout.write(colors.bgRed(" ☓ ") + colors.red(" " + string))
+                process.stdout.write(colors.bgBlue(" ℹ ") + colors.blue(" " + string))
             }
 
             process.stdout.write("\n");

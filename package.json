@@ -6,10 +6,12 @@
   "dependencies": {
     "colors": "^1.4.0",
     "dockerode": "^3.2.1",
+    "express": "^4.17.1",
     "inquirer": "^7.3.3",
     "lodash": "^4.17.20",
     "public-ip": "^4.0.2",
     "purecore": "^1.16.16",
+    "socket.io": "^2.3.0",
     "systeminformation": "^4.26.10"
   },
   "devDependencies": {},
