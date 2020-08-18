@@ -64,10 +64,14 @@ class SocketServer {
         const letsencryptBase = "/etc/letsencrypt/"
         try {
             if (fs.existsSync(letsencryptBase) && fs.existsSync(letsencryptBase + "live/")) {
-                var folders = fs.readdirSync(letsencryptBase + "live/").filter((dirent) => dirent.isDirectory());
+                let files = fs.readdirSync(letsencryptBase + "live/");
+                let folders = [];
+                files.forEach(file => {
+                    if (fs.lstatSync(letsencryptBase + file).isDirectory()) folders.push(file);
+                });
                 if (folders != null && Array.isArray(folders) && folders.length > 0) {
                     Supervisor.emitter.emit('certFound');
-                    return new Cert(fs.readFileSync(letsencryptBase + "live/" + folders[0].name + "/privkey.pem"), fs.readFileSync(letsencryptBase + "live/" + folders[0].name + "/cert.pem"), fs.readFileSync(letsencryptBase + "live/" + folders[0].name + "/chain.pem"));
+                    return new Cert(fs.readFileSync(letsencryptBase + "live/" + folders[0] + "/privkey.pem"), fs.readFileSync(letsencryptBase + "live/" + folders[0] + "/cert.pem"), fs.readFileSync(letsencryptBase + "live/" + folders[0] + "/chain.pem"));
                 } else {
                     Supervisor.emitter.emit('certNotSetup');
                     return null;
