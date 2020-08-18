@@ -1,5 +1,6 @@
 const dockerode = require('dockerode');
 const fs = require('fs');
+const cryptotool = require("crypto");
 
 class Correlativity {
 
@@ -10,17 +11,17 @@ class Correlativity {
         return new Promise(function (resolve, reject) {
             try {
                 var docker = new dockerode();
-                docker.listContainers(function (err, containers) {
+                docker.listContainers({ all: true }, function (err, containers) {
                     let existingContainers = [];
-                    
+
                     if (containers == null) { reject() } else {
 
                         containers.forEach(function (containerInfo) {
-                            for (var name of docker.getContainer(containerInfo.Id).Names) {
+                            for (var name of containerInfo.Names) {
                                 name = String(name);
                                 const prefix = "core-";
-                                if (name.substr(0, 1) == '/') name = name.substr(1, name.length - 1)
-                                if (name.includes(prefix) && name.substr(0, prefix.length) == prefix) existingContainers.push(name.substr(prefix.length, name.length - prefix.length)); break;
+                                if (name.substr(0, 1) == '/') name = name.substr(1, name.length - 1);
+                                if (name.includes(prefix) && name.substr(0, prefix.length) == prefix) existingContainers.push({ name: name.substr(prefix.length, name.length - prefix.length), id: containerInfo.Id }); break;
                             }
                         });
 
@@ -32,14 +33,57 @@ class Correlativity {
                         if (!fs.existsSync(hostedPath)) fs.mkdirSync(hostedPath)
                         if (!fs.existsSync(tempPath)) fs.mkdirSync(tempPath)
 
-                        fs.readdirSync(hostedPath).filter((dirent) => dirent.isDirectory()).forEach(folder => {
-                            if (!existingContainers.includes(folder.name)) {
-                                fs.rename(hostedPath + folder.name + "/", tempPath + "noncorrelated-" + folder.name + "/", function (err) {
-                                    if (err) reject(err);
-                                })
+                        let folders = [];
+                        let actionsToTake = 0;
+
+                        fs.readdirSync(hostedPath).forEach(folder => {
+                            if (fs.lstatSync(hostedPath + folder).isDirectory()) {
+                                folders.push(folder);
+                                let found = false;
+                                existingContainers.forEach(existingContainer => {
+                                    if (existingContainer.name == folder) {
+                                        found = true;
+                                    }
+                                });
+                                if (!found) {
+                                    actionsToTake++;
+                                    fs.rename(hostedPath + folder + "/", tempPath + "noncorrelated-" + cryptotool.randomBytes(8).toString('hex') + "-" + folder + "/", function (err) {
+                                        actionsToTake += -1;
+                                        if (err) {
+                                            Supervisor.emitter.emit('errorMovingUncorrelatedFolder', new Error(err.code));
+                                            reject(err);
+                                        } else {
+                                            Supervisor.emitter.emit('movedUncorrelatedFolder');
+                                        }
+                                        if (actionsToTake <= 0) {
+                                            resolve();
+                                        }
+                                    })
+                                }
                             }
                         });
-                        resolve();
+                        existingContainers.forEach(containerInfo => {
+                            if (!folders.includes(containerInfo.name)) {
+                                actionsToTake++;
+                                docker.getContainer(containerInfo.id).remove({
+                                    force: true
+                                }, (err) => {
+                                    actionsToTake += -1;
+                                    if (err) {
+                                        Supervisor.emitter.emit('errorRemovingUncorrelatedContainer');
+                                        reject(err);
+                                    } else {
+                                        Supervisor.emitter.emit('removedUncorrelatedContainer');
+                                    }
+                                    if (actionsToTake <= 0) {
+                                        resolve();
+                                    }
+                                });
+                            }
+                        });
+                        if (actionsToTake <= 0) {
+                            resolve();
+                        }
                     };
 
                 })
