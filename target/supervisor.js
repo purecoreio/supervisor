@@ -96,6 +96,7 @@ Supervisor.ready = false;
 module.exports.Supervisor = Supervisor;
 const dockerode = require('dockerode');
 const fs = require('fs');
+const cryptotool = require("crypto");
 class Correlativity {
     /**
      * Will move the folders on /opt/purecore/hosted/ to /opt/purecore/tmp/ when no purecore.io docker is matching that data
@@ -111,13 +112,13 @@ class Correlativity {
                     }
                     else {
                         containers.forEach(function (containerInfo) {
-                            for (var name of docker.getContainer(containerInfo.Id).Names) {
+                            for (var name of containerInfo.Names) {
                                 name = String(name);
                                 const prefix = "core-";
                                 if (name.substr(0, 1) == '/')
                                     name = name.substr(1, name.length - 1);
                                 if (name.includes(prefix) && name.substr(0, prefix.length) == prefix)
-                                    existingContainers.push(name.substr(prefix.length, name.length - prefix.length));
+                                    existingContainers.push({ name: name.substr(prefix.length, name.length - prefix.length), id: containerInfo.Id });
                                 break;
                             }
                         });
@@ -130,15 +131,58 @@ class Correlativity {
                             fs.mkdirSync(hostedPath);
                         if (!fs.existsSync(tempPath))
                             fs.mkdirSync(tempPath);
-                        fs.readdirSync(hostedPath).filter((dirent) => dirent.isDirectory()).forEach(folder => {
-                            if (!existingContainers.includes(folder.name)) {
-                                fs.rename(hostedPath + folder.name + "/", tempPath + "noncorrelated-" + folder.name + "/", function (err) {
-                                    if (err)
+                        let folders = [];
+                        let actionsToTake = 0;
+                        fs.readdirSync(hostedPath).forEach(folder => {
+                            if (fs.lstatSync(hostedPath + folder).isDirectory()) {
+                                folders.push(folder);
+                                let found = false;
+                                existingContainers.forEach(existingContainer => {
+                                    if (existingContainer.name == folder) {
+                                        found = true;
+                                    }
+                                });
+                                if (!found) {
+                                    actionsToTake++;
+                                    fs.rename(hostedPath + folder + "/", tempPath + "noncorrelated-" + cryptotool.randomBytes(8).toString('hex') + "-" + folder + "/", function (err) {
+                                        actionsToTake += -1;
+                                        if (err) {
+                                            Supervisor.emitter.emit('errorMovingUncorrelatedFolder', new Error(err.code));
+                                            reject(err);
+                                        }
+                                        else {
+                                            Supervisor.emitter.emit('movedUncorrelatedFolder');
+                                        }
+                                        if (actionsToTake <= 0) {
+                                            resolve();
+                                        }
+                                    });
+                                }
+                            }
+                        });
+                        existingContainers.forEach(containerInfo => {
+                            if (!folders.includes(containerInfo.name)) {
+                                actionsToTake++;
+                                docker.getContainer(containerInfo.id).remove({
+                                    force: true
+                                }, (err) => {
+                                    actionsToTake += -1;
+                                    if (err) {
+                                        Supervisor.emitter.emit('errorRemovingUncorrelatedContainer');
                                         reject(err);
+                                    }
+                                    else {
+                                        Supervisor.emitter.emit('removedUncorrelatedContainer');
+                                    }
+                                    if (actionsToTake <= 0) {
+                                        resolve();
+                                    }
                                 });
                             }
                         });
-                        resolve();
+                        if (actionsToTake <= 0) {
+                            resolve();
+                        }
                     }
                     ;
                 });
@@ -369,10 +413,15 @@ class SocketServer {
         const letsencryptBase = "/etc/letsencrypt/";
         try {
             if (fs.existsSync(letsencryptBase) && fs.existsSync(letsencryptBase + "live/")) {
-                var folders = fs.readdirSync(letsencryptBase + "live/").filter((dirent) => dirent.isDirectory());
+                let files = fs.readdirSync(letsencryptBase + "live/");
+                let folders = [];
+                files.forEach(file => {
+                    if (fs.lstatSync(letsencryptBase + file).isDirectory())
+                        folders.push(file);
+                });
                 if (folders != null && Array.isArray(folders) && folders.length > 0) {
                     Supervisor.emitter.emit('certFound');
-                    return new Cert(fs.readFileSync(letsencryptBase + "live/" + folders[0].name + "/privkey.pem"), fs.readFileSync(letsencryptBase + "live/" + folders[0].name + "/cert.pem"), fs.readFileSync(letsencryptBase + "live/" + folders[0].name + "/chain.pem"));
+                    return new Cert(fs.readFileSync(letsencryptBase + "live/" + folders[0] + "/privkey.pem"), fs.readFileSync(letsencryptBase + "live/" + folders[0] + "/cert.pem"), fs.readFileSync(letsencryptBase + "live/" + folders[0] + "/chain.pem"));
                 }
                 else {
                     Supervisor.emitter.emit('certNotSetup');
