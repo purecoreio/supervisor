@@ -34,6 +34,14 @@ supervisor.getEmitter().on("loadingMachine", () => {
     ConsoleUtil.setLoading(false, "Checked docker's correlativity with the existing filesystem", false)
 }).on("errorCheckingCorrelativity", () => {
     ConsoleUtil.setLoading(false, "Error while checking docker's correlativity with the existing filesystem. Is docker active? Execute this service as 'sudo'", true)
+}).on("errorMovingUncorrelatedFolder", (err) => {
+    ConsoleUtil.setLoading(false, "Error while moving an uncorrelated folder: " + err.message, true)
+}).on("movedUncorrelatedFolder", () => {
+    ConsoleUtil.setLoading(false, "Moved uncorrelated folder", false, false, true)
+}).on("errorRemovingUncorrelatedContainer", () => {
+    ConsoleUtil.setLoading(false, "Error while removing an uncorrelated container", true)
+}).on("removedUncorrelatedContainer", () => {
+    ConsoleUtil.setLoading(false, "Removed uncorrelated container", false, false, true)
 }).on("certLoading", () => {
     ConsoleUtil.setLoading(true, "Looking up available SSL certificates", false)
 }).on("certUse", () => {
