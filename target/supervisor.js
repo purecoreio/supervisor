@@ -401,7 +401,6 @@ const app = require('express')();
 class SocketServer {
     getSocket(server) {
         return new socketio(server).on('connection', client => {
-            console.log(client);
             client.on('authenticate', authInfo => {
                 this.authenticate(client, authInfo);
             });
@@ -422,7 +421,7 @@ class SocketServer {
         }
     }
     static removeAuth(clientid) {
-        if (!SocketServer.authenticated.includes(clientid)) {
+        if (SocketServer.authenticated.includes(clientid)) {
             Supervisor.emitter.emit('clientDisconnected');
             SocketServer.authenticated = SocketServer.authenticated.filter(x => x !== clientid);
         }
@@ -437,6 +436,12 @@ class SocketServer {
             else {
                 client.disconnect();
             }
+        }
+        else if (typeof authInfo == "object" && authInfo.hash == Supervisor.machine.hash) {
+            SocketServer.addAuth(client.id);
+        }
+        else {
+            client.disconnect();
         }
     }
     setup() {
@@ -476,7 +481,7 @@ class SocketServer {
             Supervisor.emitter.emit('certUnknown');
         }
         if (httpServer == null) {
-            httpServer = http.Server(app);
+            httpServer = http.createServer();
         }
         return httpServer;
     }
