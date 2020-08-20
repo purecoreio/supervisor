@@ -343,23 +343,29 @@ class DockerHelper {
     static createContainer(hostRequest) {
         return new Promise(function (resolve, reject) {
             Supervisor.emitter.emit('creatingContainer');
-            Supervisor.docker.createContainer({
-                Image: hostRequest.image, name: 'core-' + hostRequest.uuid, Env: [
-                    "EULA=true",
-                ], HostConfig: {
-                    PortBindings: { '25565/tcp': [{ HostPort: String(hostRequest.port) }] },
-                },
-            }).then((container) => {
-                Supervisor.emitter.emit('createdContainer');
-                Supervisor.emitter.emit('startingNewContainer');
-                container.start().then(() => {
-                    Supervisor.emitter.emit('startedNewContainer');
-                    resolve();
+            try {
+                Supervisor.docker.createContainer({
+                    Image: hostRequest.image, name: 'core-' + hostRequest.uuid, Env: [
+                        "EULA=true",
+                    ], HostConfig: {
+                        PortBindings: { '25565/tcp': [{ HostPort: String(hostRequest.port) }] },
+                    },
+                }).then((container) => {
+                    Supervisor.emitter.emit('createdContainer');
+                    Supervisor.emitter.emit('startingNewContainer');
+                    container.start().then(() => {
+                        Supervisor.emitter.emit('startedNewContainer');
+                        resolve();
+                    });
+                }).catch((error) => {
+                    Supervisor.emitter.emit('containerCreationError', error);
+                    reject();
                 });
-            }).catch((error) => {
-                Supervisor.emitter.emit('containerCreationError: ', error);
+            }
+            catch (error) {
+                Supervisor.emitter.emit('containerCreationError', error);
                 reject();
-            });
+            }
         });
     }
 }
@@ -395,12 +401,43 @@ const app = require('express')();
 class SocketServer {
     getSocket(server) {
         return new socketio(server).on('connection', client => {
-            Supervisor.emitter.emit('clientConnected');
-            client.on('host', hostRequest => {
-                DockerHelper.createContainer(hostRequest);
+            console.log(client);
+            client.on('authenticate', authInfo => {
+                this.authenticate(client, authInfo);
             });
-            client.on('disconnect', () => { Supervisor.emitter.emit('clientDisconnected'); });
+            client.on('host', hostRequest => {
+                if (SocketServer.isAuthenticated(client))
+                    DockerHelper.createContainer(hostRequest).catch((err) => { });
+            });
+            client.on('disconnect', () => { SocketServer.removeAuth(client.id); });
         });
+    }
+    static isAuthenticated(client) {
+        return SocketServer.authenticated.includes(client.id);
+    }
+    static addAuth(clientid) {
+        if (!SocketServer.authenticated.includes(clientid)) {
+            Supervisor.emitter.emit('clientConnected');
+            this.authenticated.push(clientid);
+        }
+    }
+    static removeAuth(clientid) {
+        if (!SocketServer.authenticated.includes(clientid)) {
+            Supervisor.emitter.emit('clientDisconnected');
+            SocketServer.authenticated = SocketServer.authenticated.filter(x => x !== clientid);
+        }
+    }
+    authenticate(client, authInfo) {
+        if ((authInfo == null || authInfo == "" || authInfo == [] || authInfo == {})) {
+            const accepetedHostnames = ["api.purecore.io", "purecore.io"];
+            const hostname = client.handshake.headers.host.split(".").shift();
+            if (accepetedHostnames.includes(hostname)) {
+                SocketServer.addAuth(client.id);
+            }
+            else {
+                client.disconnect();
+            }
+        }
     }
     setup() {
         try {
@@ -475,6 +512,7 @@ class SocketServer {
         }
     }
 }
+SocketServer.authenticated = [];
 class MachineSettings {
     static setHash(hash) {
         return new Promise(function (resolve, reject) {

@@ -71,9 +71,9 @@ supervisor.getEmitter().on("loadingMachine", () => {
 }).on("errorCreatingSocketServer", (err) => {
     ConsoleUtil.setLoading(false, "Error while creating socket server: " + err.message, true)
 }).on("clientConnected", () => {
-    ConsoleUtil.setLoading(false, "Client connected", false, false, true)
+    ConsoleUtil.setLoading(false, "Authenticated client connected", false, false, true)
 }).on("clientDisconnected", () => {
-    ConsoleUtil.setLoading(false, "Client disconnected", false, false, true)
+    ConsoleUtil.setLoading(false, "Authenticated client disconnected", false, false, true)
 }).on("creatingContainer", () => {
     ConsoleUtil.setLoading(true, "Creating a new container", false)
 }).on("createdContainer", () => {

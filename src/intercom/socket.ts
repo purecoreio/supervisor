@@ -6,15 +6,49 @@ const app = require('express')();
 class SocketServer {
 
     public static io;
+    public static authenticated = [];
 
     public getSocket(server) {
         return new socketio(server).on('connection', client => {
-            Supervisor.emitter.emit('clientConnected');
-            client.on('host', hostRequest => {
-                DockerHelper.createContainer(hostRequest)
+            console.log(client)
+            client.on('authenticate', authInfo => {
+                this.authenticate(client, authInfo);
             });
-            client.on('disconnect', () => { Supervisor.emitter.emit('clientDisconnected'); });
+            client.on('host', hostRequest => {
+                if (SocketServer.isAuthenticated(client)) DockerHelper.createContainer(hostRequest).catch((err) => { /*ignore*/ })
+            });
+            client.on('disconnect', () => { SocketServer.removeAuth(client.id) });
         })
+    }
+
+    public static isAuthenticated(client) {
+        return SocketServer.authenticated.includes(client.id);
+    }
+
+    public static addAuth(clientid) {
+        if (!SocketServer.authenticated.includes(clientid)) {
+            Supervisor.emitter.emit('clientConnected');
+            this.authenticated.push(clientid);
+        }
+    }
+
+    public static removeAuth(clientid) {
+        if (!SocketServer.authenticated.includes(clientid)) {
+            Supervisor.emitter.emit('clientDisconnected');
+            SocketServer.authenticated = SocketServer.authenticated.filter(x => x !== clientid);
+        }
+    }
+
+    public authenticate(client, authInfo) {
+        if ((authInfo == null || authInfo == "" || authInfo == [] || authInfo == {})) {
+            const accepetedHostnames = ["api.purecore.io", "purecore.io"]
+            const hostname = client.handshake.headers.host.split(".").shift();
+            if (accepetedHostnames.includes(hostname)) {
+                SocketServer.addAuth(client.id)
+            } else {
+                client.disconnect()
+            }
+        }
     }
 
     public setup() {
