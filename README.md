@@ -4,6 +4,9 @@ Manage your instances from the [purecore.io](https://purecore.io) pannel using t
 
 Please, use MacOS for development purposes only, no user control for chroot and user creating for sftp access is available when using MacOS)!
 
+# networking considerations
+Please, keep in mind this tool will use the port 31518 for the socket server and ports ranging from 31520 to 33000 for the hosted containers
+
 # installation using brew (MacOS)
 install docker from [here](https://hub.docker.com/editions/community/docker-ce-desktop-mac/)
 ```console
