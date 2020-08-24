@@ -1,7 +1,7 @@
 class MachineSettings {
 
     public static hash: string = null;
-    public static basePath = "/opt/purecore/";
+    public static basePath = "/etc/purecore/";
 
     public static setHash(hash): Promise<void> {
         return new Promise(function (resolve, reject) {
@@ -38,6 +38,7 @@ class MachineSettings {
     public static checkExistance(): Promise<void> {
         return new Promise(function (resolve, reject) {
             try {
+                if (!fs.existsSync("/etc/")) fs.mkdirSync("/etc/")
                 if (!fs.existsSync(MachineSettings.basePath)) fs.mkdirSync(MachineSettings.basePath)
                 if (!fs.existsSync(MachineSettings.basePath + "settings.json")) {
                     fs.writeFile(MachineSettings.basePath + 'settings.json', "{ \"hash\":null}", function (err) {

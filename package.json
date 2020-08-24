@@ -10,9 +10,9 @@
     "inquirer": "^7.3.3",
     "lodash": "^4.17.20",
     "public-ip": "^4.0.2",
-    "purecore": "^1.16.18",
+    "purecore": "^1.16.27",
     "socket.io": "^2.3.0",
-    "systeminformation": "^4.26.10"
+    "systeminformation": "^4.26.12"
   },
   "devDependencies": {},
   "scripts": {

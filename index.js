@@ -18,8 +18,8 @@ supervisor.getEmitter().on("loadingMachine", () => {
     })
 }).on("hashSavingError", () => {
     ConsoleUtil.setLoading(false, "Error while saving the hash. Please, run this tool as 'sudo'", true)
-}).on("hashLoadingError", () => {
-    ConsoleUtil.setLoading(false, "Error while reading the hash. Please, run this tool as 'sudo'", true)
+}).on("hashLoadingError", (err) => {
+    ConsoleUtil.setLoading(false, "Error while reading the hash. Please, run this tool as 'sudo': "+err.message, true)
 }).on("pushingHardware", () => {
     ConsoleUtil.setLoading(true, "Pushing hardware components")
 }).on("pushedHardware", () => {
@@ -36,8 +36,8 @@ supervisor.getEmitter().on("loadingMachine", () => {
     ConsoleUtil.setLoading(true, "Checking docker's correlativity with the existing filesystem")
 }).on("checkedCorrelativity", () => {
     ConsoleUtil.setLoading(false, "Checked docker's correlativity with the existing filesystem", false)
-}).on("errorCheckingCorrelativity", () => {
-    ConsoleUtil.setLoading(false, "Error while checking docker's correlativity with the existing filesystem. Is docker active? Execute this service as 'sudo'", true)
+}).on("errorCheckingCorrelativity", (err) => {
+    ConsoleUtil.setLoading(false, "Error while checking docker's correlativity with the existing filesystem. Is docker active? Execute this service as 'sudo': " + err.message, true)
 }).on("errorMovingUncorrelatedFolder", (err) => {
     ConsoleUtil.setLoading(false, "Error while moving an uncorrelated folder: " + err.message, true)
 }).on("movedUncorrelatedFolder", () => {
@@ -46,6 +46,12 @@ supervisor.getEmitter().on("loadingMachine", () => {
     ConsoleUtil.setLoading(false, "Error while removing an uncorrelated container", true)
 }).on("removedUncorrelatedContainer", () => {
     ConsoleUtil.setLoading(false, "Removed uncorrelated container", false, false, true)
+}).on("gettingHosts", () => {
+    ConsoleUtil.setLoading(true, "Getting hosts")
+}).on("gotHosts", () => {
+    ConsoleUtil.setLoading(false, "Got hosts", false)
+}).on("errorGettingHosts", () => {
+    ConsoleUtil.setLoading(false, "Error while getting hosts", true)
 }).on("certLoading", () => {
     ConsoleUtil.setLoading(true, "Looking up available SSL certificates", false)
 }).on("certUse", () => {

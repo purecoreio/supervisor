@@ -13,6 +13,8 @@ class Supervisor {
     public static ready: boolean = false;
     public static machine;
 
+    public static hosts: Array<any> = [];
+
     constructor(hash: string) {
         if (Supervisor.hash != hash && hash != null) {
             MachineSettings.getHash().then((hash) => {
@@ -46,8 +48,8 @@ class Supervisor {
         } else {
             await MachineSettings.getHash().then((storedHash) => {
                 Supervisor.hash = storedHash;
-            }).catch(() => {
-                Supervisor.emitter.emit('hashLoadingError');
+            }).catch((err) => {
+                Supervisor.emitter.emit('hashLoadingError', err);
             })
         }
 
@@ -56,16 +58,24 @@ class Supervisor {
             Supervisor.emitter.emit('gotMachine')
             Supervisor.machine = machine;
             main.IOCheck().then(() => {
-                Supervisor.emitter.emit('checkingCorrelativity');
-                Correlativity.updateFolders().then(() => {
-                    Supervisor.emitter.emit('checkedCorrelativity');
-                    try {
-                        new SocketServer().setup();
-                    } catch (error) {
-                        Supervisor.emitter.emit('errorSettingUpSockets');
-                    }
+
+                Supervisor.emitter.emit('gettingHosts');
+                Supervisor.machine.getHosts().then((hosts) => {
+                    Supervisor.emitter.emit('gotHosts');
+                    Supervisor.hosts = hosts;
+                    Supervisor.emitter.emit('checkingCorrelativity');
+                    Correlativity.updateFolders().then(() => {
+                        Supervisor.emitter.emit('checkedCorrelativity');
+                        try {
+                            new SocketServer().setup();
+                        } catch (error) {
+                            Supervisor.emitter.emit('errorSettingUpSockets');
+                        }
+                    }).catch((err) => {
+                        Supervisor.emitter.emit('errorCheckingCorrelativity', err);
+                    })
                 }).catch(() => {
-                    Supervisor.emitter.emit('errorCheckingCorrelativity');
+                    Supervisor.emitter.emit('errorGettingHosts');
                 })
             }).catch((err) => {
                 // can't complete the setup process

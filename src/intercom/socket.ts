@@ -7,34 +7,82 @@ class SocketServer {
 
     public static io;
     public static authenticated = [];
+    public static authenticatedHosts = [];
 
     public getSocket(server) {
         return new socketio(server).on('connection', client => {
             client.on('authenticate', authInfo => {
                 this.authenticate(client, authInfo);
             });
-            client.on('host', hostRequest => {
-                if (SocketServer.isAuthenticated(client)) DockerHelper.createContainer(hostRequest).catch((err) => { /*ignore*/ })
+            client.on('console', extra => {
+                if (SocketServer.getHost(client) != null && SocketServer.isAuthenticated(client)) {
+                    try {
+                        DockerHelper.getContainer(SocketServer.getHost(client)).then((container) => {
+                            DockerHelper.getLogStream(container).then((logStream) => {
+                                logStream.on('data', (data) => {
+                                    if (!client.connected) {
+                                        logStream.destroy();
+                                    } else {
+                                        console.log("sending event")
+                                        client.emit('console', data.toString('utf-8').trim())
+                                    }
+                                })
+                            })
+                        })
+                    } catch (error) {
+                        console.log(error)
+                    }
+                }
+            })
+            client.on('host', hostObject => {
+                if (SocketServer.isMasterAuthenticated(client)) DockerHelper.createContainer(hostObject).catch((err) => { /*ignore*/ })
             });
             client.on('disconnect', () => { SocketServer.removeAuth(client.id) });
         })
     }
 
-    public static isAuthenticated(client) {
-        return SocketServer.authenticated.includes(client.id);
-    }
-
-    public static addAuth(clientid) {
-        if (!SocketServer.authenticated.includes(clientid)) {
-            Supervisor.emitter.emit('clientConnected');
-            this.authenticated.push(clientid);
+    public static getHost(client) {
+        for (let index = 0; index < SocketServer.authenticatedHosts.length; index++) {
+            const element = SocketServer.authenticatedHosts[index];
+            if (element.client == client.id) return element.host; break;
         }
     }
 
+    public static isMasterAuthenticated(client): boolean {
+        return SocketServer.authenticated.includes(client.id);
+    }
+
+    public static isAuthenticated(client) {
+        if (SocketServer.authenticated.includes(client.id)) {
+            return true;
+        } else {
+            for (let index = 0; index < SocketServer.authenticatedHosts.length; index++) {
+                const element = SocketServer.authenticatedHosts[index];
+                if (element.client == client.id) return true; break;
+            }
+        }
+    }
+
+    public static addAuth(client, host?: any) {
+        if (host == null) {
+            if (!SocketServer.authenticated.includes(client.id)) {
+                Supervisor.emitter.emit('clientConnected');
+                this.authenticated.push(client.id);
+            }
+        } else {
+            if (!SocketServer.authenticatedHosts.includes(client.id)) {
+                Supervisor.emitter.emit('clientConnected');
+                this.authenticatedHosts.push({ client: client.id, host: host });
+            }
+        }
+        client.emit('authenticated')
+    }
+
     public static removeAuth(clientid) {
-        if (SocketServer.authenticated.includes(clientid)) {
+        if (this.isAuthenticated(clientid)) {
             Supervisor.emitter.emit('clientDisconnected');
             SocketServer.authenticated = SocketServer.authenticated.filter(x => x !== clientid);
+            SocketServer.authenticatedHosts = SocketServer.authenticatedHosts.filter(x => x.client !== clientid);
         }
     }
 
@@ -43,12 +91,35 @@ class SocketServer {
             const accepetedHostnames = ["api.purecore.io", "purecore.io"]
             const hostname = client.handshake.headers.host.split(".").shift();
             if (accepetedHostnames.includes(hostname)) {
-                SocketServer.addAuth(client.id)
+                SocketServer.addAuth(client)
             } else {
                 client.disconnect()
             }
-        } else if(typeof authInfo == "object" && authInfo.hash==Supervisor.machine.hash){
-            SocketServer.addAuth(client.id)
+        } else if (typeof authInfo == "object") {
+            if ('hash' in authInfo && authInfo.hash == Supervisor.machine.hash) {
+                SocketServer.addAuth(client)
+            } else if ('port' in authInfo && 'image' in authInfo) {
+                try {
+                    let host = Supervisor.machine.core.getHostingManager().getHost().fromObject(authInfo)
+                    let match = false;
+                    for (let index = 0; index < Supervisor.hosts.length; index++) {
+                        const element = Supervisor.hosts[index];
+                        if (element.uuid == host.uuid) {
+                            match = true;
+                            break;
+                        }
+                    }
+                    if (match) {
+                        SocketServer.addAuth(client, host)
+                    } else {
+                        client.disconnect()
+                    }
+                } catch (error) {
+                    client.disconnect()
+                }
+            } else {
+                client.disconnect()
+            }
         } else {
             client.disconnect()
         }

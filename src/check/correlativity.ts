@@ -4,7 +4,7 @@ const cryptotool = require("crypto");
 class Correlativity {
 
     /**
-     * Will move the folders on /opt/purecore/hosted/ to /opt/purecore/tmp/ when no purecore.io docker is matching that data
+     * Will move the folders on /etc/purecore/hosted/ to /etc/purecore/tmp/ when no purecore.io docker is matching that data
      */
     static updateFolders(): Promise<void> {
         return new Promise(function (resolve, reject) {
@@ -12,7 +12,7 @@ class Correlativity {
                 Supervisor.docker.listContainers({ all: true }, function (err, containers) {
                     let existingContainers = [];
 
-                    if (containers == null) { reject() } else {
+                    if (containers == null) { reject(new Error("couldn't communicate with Docker")) } else {
 
                         containers.forEach(function (containerInfo) {
                             for (var name of containerInfo.Names) {
@@ -23,9 +23,10 @@ class Correlativity {
                             }
                         });
 
-                        const basePath = "/opt/purecore/";
+                        const basePath = "/etc/purecore/";
                         const hostedPath = basePath + "hosted/";
                         const tempPath = basePath + "tmp/";
+
 
                         if (!fs.existsSync(basePath)) fs.mkdirSync(basePath)
                         if (!fs.existsSync(hostedPath)) fs.mkdirSync(hostedPath)
@@ -60,8 +61,14 @@ class Correlativity {
                                 }
                             }
                         });
+
+                        let existingContainerIds = [];
+                        Supervisor.hosts.forEach(host => {
+                            existingContainerIds.push(host.uuid);
+                        });
+
                         existingContainers.forEach(containerInfo => {
-                            if (!folders.includes(containerInfo.name)) {
+                            if (!folders.includes(containerInfo.name) && !existingContainerIds.includes(containerInfo.name)) {
                                 actionsToTake++;
                                 Supervisor.docker.getContainer(containerInfo.id).remove({
                                     force: true
