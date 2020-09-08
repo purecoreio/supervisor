@@ -202,6 +202,10 @@ let Correlativity = /** @class */ (() => {
                             else {
                                 existingContainers.forEach(containerInfo => {
                                     if (!existingContainerIds.includes(containerInfo.name)) {
+                                        // remove from existing containers (about to be deleted)
+                                        existingContainers = existingContainers.filter(function (returnableObjects) {
+                                            return returnableObjects.name !== containerInfo.name;
+                                        });
                                         actionsToTake++;
                                         Supervisor.docker.getContainer(containerInfo.id).remove({
                                             force: true
