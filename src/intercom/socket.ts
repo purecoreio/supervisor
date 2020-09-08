@@ -18,20 +18,25 @@ class SocketServer {
                 if (SocketServer.getHost(client) != null && SocketServer.isAuthenticated(client)) {
                     try {
                         DockerHelper.getContainer(SocketServer.getHost(client).host).then((container) => {
-                            DockerHelper.getLogStream(container).then((logStream) => {
-                                logStream.on('data', (data) => {
-                                    if (!client.connected) {
-                                        logStream.end();
-                                    } else {
-                                        console.log("sending event")
-                                        try {
-                                            client.emit('console', data.toString('utf-8').trim())
-                                        } catch (error) {
+                            try {
+                                DockerHelper.getLogStream(container).then((logStream) => {
+                                    logStream.once('data', (data) => {
+                                        if (!client.connected) {
                                             logStream.end();
+                                        } else {
+                                            try {
+                                                client.emit('console', data.toString('utf-8').trim())
+                                            } catch (error) {
+                                                logStream.end();
+                                            }
                                         }
-                                    }
+                                    }).on('error', () => {
+                                        logStream.end();
+                                    })
                                 })
-                            })
+                            } catch (error) {
+                                // ignore
+                            }
                         })
                     } catch (error) {
                         console.log(error)
