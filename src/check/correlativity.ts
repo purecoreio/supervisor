@@ -94,6 +94,7 @@ class Correlativity {
                                     if (actionsToTake <= 0) {
                                         Correlativity.checkFilesystem(existingContainers).then(() => {
                                             resolve();
+                                            console.log("checked1");
                                         }).catch((err) => {
                                             reject(err);
                                         })
@@ -103,6 +104,7 @@ class Correlativity {
                             if (actionsToTake == 0) {
                                 Correlativity.checkFilesystem(existingContainers).then(() => {
                                     resolve();
+                                    console.log("checked2");
                                 }).catch((err) => {
                                     reject(err);
                                 })
