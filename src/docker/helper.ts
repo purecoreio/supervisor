@@ -44,12 +44,12 @@ class DockerHelper {
         });
     }
 
-    public static createContainer(hostRequest): Promise<void> {
+    public static createContainer(authRequest): Promise<void> {
 
-        hostRequest = Supervisor.machine.core.getHostingManager().getHost().fromObject(hostRequest);
+        authRequest = Supervisor.machine.core.getHostingManager().getHostAuth().fromObject(authRequest);
 
-        if (!Supervisor.hosts.includes(hostRequest)) {
-            Supervisor.hosts.push(hostRequest);
+        if (!Supervisor.hostAuths.includes(authRequest)) {
+            Supervisor.hostAuths.push(authRequest);
         }
 
         return new Promise(function (resolve, reject) {
@@ -57,10 +57,10 @@ class DockerHelper {
 
             try {
                 Supervisor.docker.createContainer({
-                    Image: hostRequest.image, name: 'core-' + hostRequest.uuid, Env: [
+                    Image: authRequest.host.image, name: 'core-' + authRequest.host.uuid, Env: [
                         "EULA=true",
                     ], HostConfig: {
-                        PortBindings: { '25565/tcp': [{ HostPort: String(hostRequest.port) }] },
+                        PortBindings: { '25565/tcp': [{ HostPort: String(authRequest.host.port) }] },
                     },
                 }).then((container) => {
                     Supervisor.emitter.emit('createdContainer');

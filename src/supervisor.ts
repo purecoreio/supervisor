@@ -13,7 +13,7 @@ class Supervisor {
     public static ready: boolean = false;
     public static machine;
 
-    public static hosts: Array<any> = [];
+    public static hostAuths: Array<any> = [];
 
     constructor(hash: string) {
         if (Supervisor.hash != hash && hash != null) {
@@ -60,9 +60,9 @@ class Supervisor {
             main.IOCheck().then(() => {
 
                 Supervisor.emitter.emit('gettingHosts');
-                Supervisor.machine.getHosts().then((hosts) => {
+                Supervisor.machine.getHostAuths().then((hosts) => {
                     Supervisor.emitter.emit('gotHosts');
-                    Supervisor.hosts = hosts;
+                    Supervisor.hostAuths = hosts;
                     Supervisor.emitter.emit('checkingCorrelativity');
                     Correlativity.updateFolders().then(() => {
                         Supervisor.emitter.emit('checkedCorrelativity');

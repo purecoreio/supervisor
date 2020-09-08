@@ -72,7 +72,7 @@ class SocketServer {
         } else {
             if (!SocketServer.authenticatedHosts.includes(client.id)) {
                 Supervisor.emitter.emit('clientConnected');
-                this.authenticatedHosts.push({ client: client.id, host: host });
+                SocketServer.authenticatedHosts.push({ client: client.id, hostAuth: host });
             }
         }
         client.emit('authenticated')
@@ -98,19 +98,19 @@ class SocketServer {
         } else if (typeof authInfo == "object") {
             if ('hash' in authInfo && authInfo.hash == Supervisor.machine.hash) {
                 SocketServer.addAuth(client)
-            } else if ('port' in authInfo && 'image' in authInfo) {
+            } else if ('auth' in authInfo) {
                 try {
-                    let host = Supervisor.machine.core.getHostingManager().getHost().fromObject(authInfo)
-                    let match = false;
-                    for (let index = 0; index < Supervisor.hosts.length; index++) {
-                        const element = Supervisor.hosts[index];
-                        if (element.uuid == host.uuid) {
-                            match = true;
+                    let authHash = authInfo.auth;
+                    let match = null;
+                    for (let index = 0; index < Supervisor.hostAuths.length; index++) {
+                        const element = Supervisor.hostAuths[index];
+                        if (element.hash == authHash) {
+                            match = element;
                             break;
                         }
                     }
-                    if (match) {
-                        SocketServer.addAuth(client, host)
+                    if (match != null) {
+                        SocketServer.addAuth(client, match)
                     } else {
                         client.disconnect()
                     }

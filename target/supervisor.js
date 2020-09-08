@@ -53,9 +53,9 @@ let Supervisor = /** @class */ (() => {
                     Supervisor.machine = machine;
                     main.IOCheck().then(() => {
                         Supervisor.emitter.emit('gettingHosts');
-                        Supervisor.machine.getHosts().then((hosts) => {
+                        Supervisor.machine.getHostAuths().then((hosts) => {
                             Supervisor.emitter.emit('gotHosts');
-                            Supervisor.hosts = hosts;
+                            Supervisor.hostAuths = hosts;
                             Supervisor.emitter.emit('checkingCorrelativity');
                             Correlativity.updateFolders().then(() => {
                                 Supervisor.emitter.emit('checkedCorrelativity');
@@ -112,7 +112,7 @@ let Supervisor = /** @class */ (() => {
     // actual props
     Supervisor.hash = null;
     Supervisor.ready = false;
-    Supervisor.hosts = [];
+    Supervisor.hostAuths = [];
     return Supervisor;
 })();
 module.exports.Supervisor = Supervisor;
@@ -181,8 +181,8 @@ class Correlativity {
                             }
                         });
                         let existingContainerIds = [];
-                        Supervisor.hosts.forEach(host => {
-                            existingContainerIds.push(host.uuid);
+                        Supervisor.hostAuths.forEach(auth => {
+                            existingContainerIds.push(auth.host.uuid);
                         });
                         existingContainers.forEach(containerInfo => {
                             if (!folders.includes(containerInfo.name) && !existingContainerIds.includes(containerInfo.name)) {
@@ -404,19 +404,19 @@ let DockerHelper = /** @class */ (() => {
                 });
             });
         }
-        static createContainer(hostRequest) {
-            hostRequest = Supervisor.machine.core.getHostingManager().getHost().fromObject(hostRequest);
-            if (!Supervisor.hosts.includes(hostRequest)) {
-                Supervisor.hosts.push(hostRequest);
+        static createContainer(authRequest) {
+            authRequest = Supervisor.machine.core.getHostingManager().getHostAuth().fromObject(authRequest);
+            if (!Supervisor.hostAuths.includes(authRequest)) {
+                Supervisor.hostAuths.push(authRequest);
             }
             return new Promise(function (resolve, reject) {
                 Supervisor.emitter.emit('creatingContainer');
                 try {
                     Supervisor.docker.createContainer({
-                        Image: hostRequest.image, name: 'core-' + hostRequest.uuid, Env: [
+                        Image: authRequest.host.image, name: 'core-' + authRequest.host.uuid, Env: [
                             "EULA=true",
                         ], HostConfig: {
-                            PortBindings: { '25565/tcp': [{ HostPort: String(hostRequest.port) }] },
+                            PortBindings: { '25565/tcp': [{ HostPort: String(authRequest.host.port) }] },
                         },
                     }).then((container) => {
                         Supervisor.emitter.emit('createdContainer');
@@ -538,7 +538,7 @@ let SocketServer = /** @class */ (() => {
             else {
                 if (!SocketServer.authenticatedHosts.includes(client.id)) {
                     Supervisor.emitter.emit('clientConnected');
-                    this.authenticatedHosts.push({ client: client.id, host: host });
+                    SocketServer.authenticatedHosts.push({ client: client.id, hostAuth: host });
                 }
             }
             client.emit('authenticated');
@@ -565,19 +565,19 @@ let SocketServer = /** @class */ (() => {
                 if ('hash' in authInfo && authInfo.hash == Supervisor.machine.hash) {
                     SocketServer.addAuth(client);
                 }
-                else if ('port' in authInfo && 'image' in authInfo) {
+                else if ('auth' in authInfo) {
                     try {
-                        let host = Supervisor.machine.core.getHostingManager().getHost().fromObject(authInfo);
-                        let match = false;
-                        for (let index = 0; index < Supervisor.hosts.length; index++) {
-                            const element = Supervisor.hosts[index];
-                            if (element.uuid == host.uuid) {
-                                match = true;
+                        let authHash = authInfo.auth;
+                        let match = null;
+                        for (let index = 0; index < Supervisor.hostAuths.length; index++) {
+                            const element = Supervisor.hostAuths[index];
+                            if (element.hash == authHash) {
+                                match = element;
                                 break;
                             }
                         }
-                        if (match) {
-                            SocketServer.addAuth(client, host);
+                        if (match != null) {
+                            SocketServer.addAuth(client, match);
                         }
                         else {
                             client.disconnect();

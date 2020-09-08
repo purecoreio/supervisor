@@ -63,8 +63,8 @@ class Correlativity {
                         });
 
                         let existingContainerIds = [];
-                        Supervisor.hosts.forEach(host => {
-                            existingContainerIds.push(host.uuid);
+                        Supervisor.hostAuths.forEach(auth => {
+                            existingContainerIds.push(auth.host.uuid);
                         });
 
                         existingContainers.forEach(containerInfo => {
