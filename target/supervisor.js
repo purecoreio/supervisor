@@ -426,20 +426,25 @@ let DockerHelper = /** @class */ (() => {
                 });
             });
         }
-        static removeUser(host) {
+        static removeUser(username) {
             return __awaiter(this, void 0, void 0, function* () {
                 return new Promise(function (resolve, reject) {
                     Supervisor.emitter.emit('removingUser');
-                    linuxUser.removeUser(host.uuid, function (err, data) {
-                        if (err || data == null) {
-                            Supervisor.emitter.emit('errorRemovingUser');
-                            reject();
-                        }
-                        else {
-                            Supervisor.emitter.emit('removedUser');
-                            resolve();
-                        }
-                    });
+                    if (typeof username == 'string' && username.length == 16) {
+                        linuxUser.removeUser(username, function (err, data) {
+                            if (err || data == null) {
+                                Supervisor.emitter.emit('errorRemovingUser');
+                                reject();
+                            }
+                            else {
+                                Supervisor.emitter.emit('removedUser');
+                                resolve();
+                            }
+                        });
+                    }
+                    else {
+                        reject();
+                    }
                 });
             });
         }

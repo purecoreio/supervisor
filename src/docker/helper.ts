@@ -25,18 +25,22 @@ class DockerHelper {
         });
     }
 
-    public static async removeUser(host): Promise<void> {
+    public static async removeUser(username): Promise<void> {
         return new Promise(function (resolve, reject) {
             Supervisor.emitter.emit('removingUser');
-            linuxUser.removeUser(host.uuid, function (err, data) {
-                if (err || data == null) {
-                    Supervisor.emitter.emit('errorRemovingUser');
-                    reject();
-                } else {
-                    Supervisor.emitter.emit('removedUser');
-                    resolve();
-                }
-            });
+            if (typeof username == 'string' && username.length == 16) {
+                linuxUser.removeUser(username, function (err, data) {
+                    if (err || data == null) {
+                        Supervisor.emitter.emit('errorRemovingUser');
+                        reject();
+                    } else {
+                        Supervisor.emitter.emit('removedUser');
+                        resolve();
+                    }
+                });
+            } else {
+                reject();
+            }
         })
     }
 
