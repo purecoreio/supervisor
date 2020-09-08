@@ -197,7 +197,12 @@ let Correlativity = /** @class */ (() => {
                                 existingContainerIds.push(auth.host.uuid);
                             });
                             if (existingContainers.length <= 0) {
-                                resolve();
+                                console.log("checking filesystem");
+                                Correlativity.checkFilesystem(existingContainers).then(() => {
+                                    resolve();
+                                }).catch((err) => {
+                                    reject(err);
+                                });
                             }
                             else {
                                 existingContainers.forEach(containerInfo => {

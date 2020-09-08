@@ -85,6 +85,7 @@ class Correlativity {
                         });
 
                         if (existingContainers.length <= 0) {
+                            console.log("checking filesystem")
                             Correlativity.checkFilesystem(existingContainers).then(() => {
                                 resolve();
                             }).catch((err) => {
