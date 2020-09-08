@@ -62,6 +62,7 @@ class DockerHelper {
                 Image: authRequest.host.image, name: 'core-' + authRequest.host.uuid,
                 Env: [
                     "EULA=true",
+                    "MEMORY=" + authRequest.host.template.memory
                 ],
                 HostConfig: {
                     PortBindings: {
@@ -80,31 +81,33 @@ class DockerHelper {
                 },
             }
 
-            const info = Supervisor.docker.info();
-            console.log(info);
-            if (info.Driver != 'overlay2') {
-                ConsoleUtil.setLoading(false, "Creating container with no size limit, please, use the overlay2 storage driver (currently using " + info.Driver + ")", false, true, false);
-            } else {
-                opts.HostConfig.StorageOpt = {
-                    size: `${authRequest.host.template.size / 1073741824}G`
+            Supervisor.docker.info().then((info) => {
+                if (info.Driver != 'overlay2') {
+                    ConsoleUtil.setLoading(false, "Creating container with no size limit, please, use the overlay2 storage driver (currently using " + info.Driver + ")", false, true, false);
+                } else {
+                    opts.HostConfig.StorageOpt = {
+                        size: `${authRequest.host.template.size / 1073741824}G`
+                    }
                 }
-            }
 
-            try {
-                Supervisor.docker.createContainer(opts).then((container) => {
-                    Supervisor.emitter.emit('createdContainer');
-                    Supervisor.emitter.emit('startingNewContainer');
-                    container.start().then(() => {
-                        Supervisor.emitter.emit('startedNewContainer');
-                        resolve();
+                try {
+                    Supervisor.docker.createContainer(opts).then((container) => {
+                        Supervisor.emitter.emit('createdContainer');
+                        Supervisor.emitter.emit('startingNewContainer');
+                        container.start().then(() => {
+                            Supervisor.emitter.emit('startedNewContainer');
+                            resolve();
+                        })
+
+                    }).catch((error) => {
+                        Supervisor.emitter.emit('containerCreationError', error); reject();
                     })
-
-                }).catch((error) => {
+                } catch (error) {
                     Supervisor.emitter.emit('containerCreationError', error); reject();
-                })
-            } catch (error) {
-                Supervisor.emitter.emit('containerCreationError', error); reject();
-            }
+                }
+            }).catch((err) => {
+                Supervisor.emitter.emit('containerCreationError', err); reject();
+            })
         });
     }
 
