@@ -43,6 +43,7 @@ class Correlativity {
                         }
                     }
                 });
+                if (actionsToTake <= 0) resolve();
             } catch (err) {
                 reject(err);
             }
