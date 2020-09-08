@@ -382,28 +382,32 @@ let DockerHelper = /** @class */ (() => {
             });
         }
         static getLogStream(container) {
-            let emitter = new EventEmitter();
-            const logStream = new PassThrough();
-            if (container != null) {
-                container.logs({
-                    follow: true,
-                    stdout: true,
-                    stderr: true
-                }, function (err, stream) {
-                    container.modem.demuxStream(stream, logStream, logStream);
-                    stream.on('end', function () {
-                        logStream.end('!stop');
-                        emitter.removeAllListeners();
-                    });
-                    stream.on('data', function (data) {
-                        emitter.emit('newLine', data.toString('utf-8').trim());
-                    });
+            return __awaiter(this, void 0, void 0, function* () {
+                return new Promise(function (resolve, reject) {
+                    const logStream = new PassThrough();
+                    const emitter = new EventEmitter();
+                    if (container != null) {
+                        container.logs({
+                            follow: true,
+                            stdout: true,
+                            stderr: true
+                        }, function (err, stream) {
+                            container.modem.demuxStream(stream, logStream, logStream);
+                            stream.on('end', function () {
+                                logStream.end('!stop');
+                            });
+                            stream.on('data', function (data) {
+                                emitter.emit('console', data.toString('utf-8').trim());
+                            });
+                            resolve(emitter);
+                        });
+                    }
+                    else {
+                        throw new Error("Unknown container");
+                    }
                 });
-            }
-            else {
-                throw new Error("Unknown container");
-            }
-            return emitter;
+                return emitter;
+            });
         }
         static createContainer(authRequest) {
             authRequest = Supervisor.machine.core.getHostingManager().getHostAuth().fromObject(authRequest);
@@ -482,9 +486,17 @@ let SocketServer = /** @class */ (() => {
                             DockerHelper.getContainer(SocketServer.getHost(client).host).then((container) => {
                                 try {
                                     DockerHelper.getLogStream(container).then((logStream) => {
-                                        logStream.on('newLine', (line) => {
-                                            if (client.connected) {
-                                                client.emit('console', line);
+                                        logStream.on('data', (data) => {
+                                            if (!client.connected) {
+                                                logStream.end();
+                                            }
+                                            else {
+                                                try {
+                                                    client.emit('console', data.toString('utf-8').trim());
+                                                }
+                                                catch (error) {
+                                                    logStream.end();
+                                                }
                                             }
                                         }).on('error', () => {
                                             logStream.end();

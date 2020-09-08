@@ -22,27 +22,30 @@ class DockerHelper {
         });
     }
 
-    public static getLogStream(container): any {
-        let emitter = new EventEmitter();
-        const logStream = new PassThrough();
-        if (container != null) {
-            container.logs({
-                follow: true,
-                stdout: true,
-                stderr: true
-            }, function (err, stream) {
-                container.modem.demuxStream(stream, logStream, logStream)
-                stream.on('end', function () {
-                    logStream.end('!stop');
-                    emitter.removeAllListeners()
+    public static async getLogStream(container): Promise<any> {
+        return new Promise(function (resolve, reject) {
+            const logStream = new PassThrough();
+            const emitter = new EventEmitter();
+            if (container != null) {
+                container.logs({
+                    follow: true,
+                    stdout: true,
+                    stderr: true
+                }, function (err, stream) {
+                    container.modem.demuxStream(stream, logStream, logStream)
+                    stream.on('end', function () {
+                        logStream.end('!stop');
+                    })
+                    stream.on('data', function (data) {
+                        emitter.emit('console', data.toString('utf-8').trim())
+                    })
+                    resolve(emitter);
                 })
-                stream.on('data', function (data) {
-                    emitter.emit('newLine', data.toString('utf-8').trim())
-                })
-            })
-        } else {
-            throw new Error("Unknown container");
-        }
+            } else {
+                throw new Error("Unknown container");
+
+            }
+        });
         return emitter;
     }
 

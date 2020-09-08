@@ -20,9 +20,15 @@ class SocketServer {
                         DockerHelper.getContainer(SocketServer.getHost(client).host).then((container) => {
                             try {
                                 DockerHelper.getLogStream(container).then((logStream) => {
-                                    logStream.on('newLine', (line) => {
-                                        if (client.connected) {
-                                            client.emit('console', line)
+                                    logStream.on('data', (data) => {
+                                        if (!client.connected) {
+                                            logStream.end();
+                                        } else {
+                                            try {
+                                                client.emit('console', data.toString('utf-8').trim())
+                                            } catch (error) {
+                                                logStream.end();
+                                            }
                                         }
                                     }).on('error', () => {
                                         logStream.end();
