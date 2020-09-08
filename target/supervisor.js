@@ -441,6 +441,29 @@ let DockerHelper = /** @class */ (() => {
                 });
             });
         }
+        static actuallyCreateContainer(retrypquota, opts) {
+            let promise = new Promise(function (resolve, reject) {
+                Supervisor.docker.createContainer(opts).then((container) => {
+                    Supervisor.emitter.emit('createdContainer');
+                    Supervisor.emitter.emit('startingNewContainer');
+                    container.start().then(() => {
+                        Supervisor.emitter.emit('startedNewContainer');
+                        resolve(null);
+                    });
+                }).catch((error) => {
+                    if (retrypquota && error.message.includes('pquota')) {
+                        ConsoleUtil.setLoading(false, "Creating container with no size limit, please, use the overlay2 storage driver, back it with extfs, enable d_type and make sure pquota is available (probably your issue, read more here: https://stackoverflow.com/a/57248363/7280257)", false, true, false);
+                        delete opts.HostConfig.StorageOpt;
+                        let newPromise = DockerHelper.actuallyCreateContainer(false, opts);
+                        resolve(newPromise);
+                    }
+                    else {
+                        reject(error);
+                    }
+                });
+            });
+            return promise;
+        }
         static createContainer(authRequest) {
             authRequest = Supervisor.machine.core.getHostingManager().getHostAuth().fromObject(authRequest);
             if (!Supervisor.hostAuths.includes(authRequest)) {
@@ -466,42 +489,37 @@ let DockerHelper = /** @class */ (() => {
                         RestartPolicy: {
                             name: 'unless-stopped',
                         },
+                        StorageOpt: {
+                            size: `${authRequest.host.template.size / 1073741824}G`
+                        },
                         Binds: [
                             `${hostedPath}/${authRequest.host.uuid}:/data`
                         ],
                         Cpus: authRequest.host.template.cores
                     },
                 };
-                Supervisor.docker.info().then((info) => {
-                    if (info.Driver != 'overlay2') {
-                        ConsoleUtil.setLoading(false, "Creating container with no size limit, please, use the overlay2 storage driver (currently using " + info.Driver + ")", false, true, false);
-                    }
-                    else {
-                        opts.HostConfig.StorageOpt = {
-                            size: `${authRequest.host.template.size / 1073741824}G`
-                        };
-                    }
-                    try {
-                        Supervisor.docker.createContainer(opts).then((container) => {
-                            Supervisor.emitter.emit('createdContainer');
-                            Supervisor.emitter.emit('startingNewContainer');
-                            container.start().then(() => {
-                                Supervisor.emitter.emit('startedNewContainer');
+                try {
+                    DockerHelper.actuallyCreateContainer(true, opts).then((res) => {
+                        if (res == null) {
+                            resolve();
+                        }
+                        else {
+                            res.then(() => {
                                 resolve();
+                            }).catch((err) => {
+                                Supervisor.emitter.emit('containerCreationError', err);
+                                reject();
                             });
-                        }).catch((error) => {
-                            Supervisor.emitter.emit('containerCreationError', error);
-                            reject();
-                        });
-                    }
-                    catch (error) {
-                        Supervisor.emitter.emit('containerCreationError', error);
+                        }
+                    }).catch((err) => {
+                        Supervisor.emitter.emit('containerCreationError', err);
                         reject();
-                    }
-                }).catch((err) => {
-                    Supervisor.emitter.emit('containerCreationError', err);
+                    });
+                }
+                catch (error) {
+                    Supervisor.emitter.emit('containerCreationError', error);
                     reject();
-                });
+                }
             });
         }
     }

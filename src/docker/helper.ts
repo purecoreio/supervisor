@@ -44,26 +44,27 @@ class DockerHelper {
         });
     }
 
-    public static actuallyCreateContainer(retrypquota, opts): Promise<void> {
-        return new Promise(function (resolve, reject) {
+    public static actuallyCreateContainer(retrypquota, opts): Promise<any> {
+        let promise: Promise<any> = new Promise(function (resolve, reject) {
             Supervisor.docker.createContainer(opts).then((container) => {
                 Supervisor.emitter.emit('createdContainer');
                 Supervisor.emitter.emit('startingNewContainer');
                 container.start().then(() => {
                     Supervisor.emitter.emit('startedNewContainer');
-                    resolve();
+                    resolve(null);
                 })
             }).catch((error) => {
                 if (retrypquota && error.message.includes('pquota')) {
                     ConsoleUtil.setLoading(false, "Creating container with no size limit, please, use the overlay2 storage driver, back it with extfs, enable d_type and make sure pquota is available (probably your issue, read more here: https://stackoverflow.com/a/57248363/7280257)", false, true, false);
                     delete opts.HostConfig.StorageOpt;
-                    DockerHelper.actuallyCreateContainer(false, opts);
+                    let newPromise = DockerHelper.actuallyCreateContainer(false, opts);
+                    resolve(newPromise)
                 } else {
                     reject(error);
                 }
-                reject(error);
             })
         })
+        return promise;
     }
 
     public static createContainer(authRequest): Promise<void> {
@@ -107,8 +108,16 @@ class DockerHelper {
             }
 
             try {
-                DockerHelper.actuallyCreateContainer(true, opts).then(() => {
-                    resolve();
+                DockerHelper.actuallyCreateContainer(true, opts).then((res) => {
+                    if (res == null) {
+                        resolve();
+                    } else {
+                        res.then(() => {
+                            resolve();
+                        }).catch((err) => {
+                            Supervisor.emitter.emit('containerCreationError', err); reject();
+                        })
+                    }
                 }).catch((err) => {
                     Supervisor.emitter.emit('containerCreationError', err); reject();
                 })
