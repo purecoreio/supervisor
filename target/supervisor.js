@@ -482,11 +482,16 @@ let SocketServer = /** @class */ (() => {
                                 DockerHelper.getLogStream(container).then((logStream) => {
                                     logStream.on('data', (data) => {
                                         if (!client.connected) {
-                                            logStream.destroy();
+                                            logStream.end();
                                         }
                                         else {
                                             console.log("sending event");
-                                            client.emit('console', data.toString('utf-8').trim());
+                                            try {
+                                                client.emit('console', data.toString('utf-8').trim());
+                                            }
+                                            catch (error) {
+                                                logStream.end();
+                                            }
                                         }
                                     });
                                 });
