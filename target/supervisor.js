@@ -435,6 +435,7 @@ let DockerHelper = /** @class */ (() => {
                     },
                 };
                 const info = Supervisor.docker.info();
+                console.log(info);
                 if (info.Driver != 'overlay2') {
                     ConsoleUtil.setLoading(false, "Creating container with no size limit, please, use the overlay2 storage driver (currently using " + info.Driver + ")", false, true, false);
                 }
