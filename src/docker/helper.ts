@@ -22,26 +22,28 @@ class DockerHelper {
         });
     }
 
-    public static async getLogStream(container): Promise<any> {
-        return new Promise(function (resolve, reject) {
-            const logStream = new PassThrough();
-            if (container != null) {
-                container.logs({
-                    follow: true,
-                    stdout: true,
-                    stderr: true
-                }, function (err, stream) {
-                    container.modem.demuxStream(stream, logStream, logStream)
-                    stream.on('end', function () {
-                        logStream.end('!stop');
-                    })
-                    resolve(logStream);
+    public static getLogStream(container): any {
+        let emitter = new EventEmitter();
+        const logStream = new PassThrough();
+        if (container != null) {
+            container.logs({
+                follow: true,
+                stdout: true,
+                stderr: true
+            }, function (err, stream) {
+                container.modem.demuxStream(stream, logStream, logStream)
+                stream.on('end', function () {
+                    logStream.end('!stop');
+                    emitter.removeAllListeners()
                 })
-            } else {
-                throw new Error("Unknown container");
-
-            }
-        });
+                stream.on('data', function (data) {
+                    emitter.emit('newLine', data.toString('utf-8').trim())
+                })
+            })
+        } else {
+            throw new Error("Unknown container");
+        }
+        return emitter;
     }
 
     public static createContainer(authRequest): Promise<void> {
