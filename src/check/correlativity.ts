@@ -13,6 +13,8 @@ class Correlativity {
     static tempPath = "/etc/purecore/tmp/";
 
     static checkFilesystem(existingContainers): Promise<void> {
+        console.log("checking");
+        console.log(existingContainers);
         return new Promise(function (resolve, reject) {
             try {
                 let folders = [];
@@ -27,6 +29,7 @@ class Correlativity {
                             }
                         });
                         if (!found) {
+                            console.log("pending folder");
                             actionsToTake++;
                             fs.rename(Correlativity.hostedPath + folder + "/", Correlativity.tempPath + "noncorrelated-" + cryptotool.randomBytes(8).toString('hex') + "-" + folder + "/", function (err) {
                                 actionsToTake += -1;
@@ -43,7 +46,10 @@ class Correlativity {
                         }
                     }
                 });
-                if (actionsToTake <= 0) resolve();
+                if (actionsToTake <= 0) {
+                    console.log("No orphan folders");
+                    resolve();
+                }
             } catch (err) {
                 reject(err);
             }
@@ -94,7 +100,6 @@ class Correlativity {
                                     if (actionsToTake <= 0) {
                                         Correlativity.checkFilesystem(existingContainers).then(() => {
                                             resolve();
-                                            console.log("checked1");
                                         }).catch((err) => {
                                             reject(err);
                                         })
@@ -104,7 +109,6 @@ class Correlativity {
                             if (actionsToTake == 0) {
                                 Correlativity.checkFilesystem(existingContainers).then(() => {
                                     resolve();
-                                    console.log("checked2");
                                 }).catch((err) => {
                                     reject(err);
                                 })

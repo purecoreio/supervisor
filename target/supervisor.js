@@ -121,6 +121,8 @@ const cryptotool = require("crypto");
 let Correlativity = /** @class */ (() => {
     class Correlativity {
         static checkFilesystem(existingContainers) {
+            console.log("checking");
+            console.log(existingContainers);
             return new Promise(function (resolve, reject) {
                 try {
                     let folders = [];
@@ -135,6 +137,7 @@ let Correlativity = /** @class */ (() => {
                                 }
                             });
                             if (!found) {
+                                console.log("pending folder");
                                 actionsToTake++;
                                 fs.rename(Correlativity.hostedPath + folder + "/", Correlativity.tempPath + "noncorrelated-" + cryptotool.randomBytes(8).toString('hex') + "-" + folder + "/", function (err) {
                                     actionsToTake += -1;
@@ -152,8 +155,10 @@ let Correlativity = /** @class */ (() => {
                             }
                         }
                     });
-                    if (actionsToTake <= 0)
+                    if (actionsToTake <= 0) {
+                        console.log("No orphan folders");
                         resolve();
+                    }
                 }
                 catch (err) {
                     reject(err);
