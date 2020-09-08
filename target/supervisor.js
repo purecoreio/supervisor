@@ -136,6 +136,9 @@ let Correlativity = /** @class */ (() => {
                             });
                             if (!found) {
                                 actionsToTake++;
+                                DockerHelper.removeUser(folder).catch(() => {
+                                    //ignore
+                                });
                                 fs.rename(Correlativity.hostedPath + folder + "/", Correlativity.tempPath + "noncorrelated-" + cryptotool.randomBytes(8).toString('hex') + "-" + folder + "/", function (err) {
                                     actionsToTake += -1;
                                     if (err) {
@@ -203,6 +206,9 @@ let Correlativity = /** @class */ (() => {
                                 existingContainers.forEach(containerInfo => {
                                     if (!existingContainerIds.includes(containerInfo.name)) {
                                         // remove from existing containers (about to be deleted)
+                                        DockerHelper.removeUser(containerInfo.name).catch(() => {
+                                            //ignore
+                                        });
                                         existingContainers = existingContainers.filter(function (returnableObjects) {
                                             return returnableObjects.name !== containerInfo.name;
                                         });
@@ -395,6 +401,8 @@ let ConsoleUtil = /** @class */ (() => {
 })();
 module.exports.ConsoleUtil = ConsoleUtil;
 const { PassThrough } = require('stream');
+const linuxUser = require('linux-sys-user');
+const chroot = require('chroot');
 let DockerHelper = /** @class */ (() => {
     class DockerHelper {
         static getContainer(host) {
@@ -414,6 +422,91 @@ let DockerHelper = /** @class */ (() => {
                                 }
                             }
                         }
+                    });
+                });
+            });
+        }
+        static removeUser(host) {
+            return __awaiter(this, void 0, void 0, function* () {
+                return new Promise(function (resolve, reject) {
+                    Supervisor.emitter.emit('removingUser');
+                    linuxUser.removeUser(host.uuid, function (err, data) {
+                        if (err || data == null) {
+                            Supervisor.emitter.emit('errorRemovingUser');
+                            reject();
+                        }
+                        else {
+                            Supervisor.emitter.emit('removedUser');
+                            resolve();
+                        }
+                    });
+                });
+            });
+        }
+        static createGroupIfNeeded() {
+            return __awaiter(this, void 0, void 0, function* () {
+                return new Promise(function (resolve, reject) {
+                    linuxUser.getGroupInfo('purecore', function (err, data) {
+                        if (err || data == null) {
+                            Supervisor.emitter.emit('creatingGroup');
+                            linuxUser.addGroup('purecore', function (err, data) {
+                                if (err) {
+                                    reject();
+                                }
+                                else {
+                                    Supervisor.emitter.emit('createdGroup');
+                                    resolve();
+                                }
+                            });
+                        }
+                        else {
+                            resolve();
+                        }
+                    });
+                });
+            });
+        }
+        static createUser(hostAuth) {
+            return __awaiter(this, void 0, void 0, function* () {
+                return new Promise(function (resolve, reject) {
+                    DockerHelper.createGroupIfNeeded().then(() => {
+                        Supervisor.emitter.emit('creatingUser');
+                        linuxUser.addUser({ username: hostAuth.host.uuid, create_home: false, shell: null }, function (err, user) {
+                            if (err) {
+                                Supervisor.emitter.emit('errorCreatingUser');
+                                reject();
+                            }
+                            Supervisor.emitter.emit('createdUser');
+                            Supervisor.emitter.emit('addingUserToGroup');
+                            linuxUser.addUserToGroup(hostAuth.host.uuid, 'purecore', function (err, user) {
+                                if (err) {
+                                    Supervisor.emitter.emit('errorAddingUserToGroup');
+                                    reject();
+                                }
+                                Supervisor.emitter.emit('addedUserToGroup');
+                                Supervisor.emitter.emit('settingUserPassword');
+                                linuxUser.setPassword(hostAuth.host.uuid, hostAuth.hash, function (err, user) {
+                                    if (err) {
+                                        Supervisor.emitter.emit('errorSettingUserPassword');
+                                        reject();
+                                    }
+                                    Supervisor.emitter.emit('setUserPassword');
+                                    Supervisor.emitter.emit('settingUserRoot');
+                                    try {
+                                        chroot(`${Correlativity.hostedPath}${hostAuth.host.uuid}/`, hostAuth.host.uuid);
+                                        Supervisor.emitter.emit('setUserRoot');
+                                        resolve();
+                                    }
+                                    catch (error) {
+                                        Supervisor.emitter.emit('errorSettingUserRoot');
+                                        reject();
+                                    }
+                                });
+                            });
+                        });
+                    }).catch((err) => {
+                        Supervisor.emitter.emit('errorCreatingGroup');
+                        reject();
                     });
                 });
             });
@@ -495,17 +588,29 @@ let DockerHelper = /** @class */ (() => {
                         Binds: [
                             `${hostedPath}/${authRequest.host.uuid}:/data`
                         ],
-                        Cpus: authRequest.host.template.cores
+                        NanoCpus: authRequest.host.template.cores * 10 ^ 9
                     },
                 };
                 try {
                     DockerHelper.actuallyCreateContainer(true, opts).then((res) => {
                         if (res == null) {
-                            resolve();
+                            Supervisor.emitter.emit('registeringUser');
+                            DockerHelper.createUser(authRequest).then(() => {
+                                Supervisor.emitter.emit('registeredUser');
+                                resolve();
+                            }).catch(() => {
+                                Supervisor.emitter.emit('errorUserRegistration');
+                            });
                         }
                         else {
                             res.then(() => {
-                                resolve();
+                                Supervisor.emitter.emit('registeringUser');
+                                DockerHelper.createUser(authRequest).then(() => {
+                                    Supervisor.emitter.emit('registeredUser');
+                                    resolve();
+                                }).catch(() => {
+                                    Supervisor.emitter.emit('errorUserRegistration');
+                                });
                             }).catch((err) => {
                                 Supervisor.emitter.emit('containerCreationError', err);
                                 reject();

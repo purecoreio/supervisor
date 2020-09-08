@@ -1,4 +1,7 @@
 const { PassThrough } = require('stream')
+const linuxUser = require('linux-sys-user');
+const chroot = require('chroot');
+
 class DockerHelper {
 
     public static hostingFolder = "/etc/purecore/hosted/"
@@ -19,6 +22,84 @@ class DockerHelper {
                     }
                 }
             });
+        });
+    }
+
+    public static async removeUser(host): Promise<void> {
+        return new Promise(function (resolve, reject) {
+            Supervisor.emitter.emit('removingUser');
+            linuxUser.removeUser(host.uuid, function (err, data) {
+                if (err || data == null) {
+                    Supervisor.emitter.emit('errorRemovingUser');
+                    reject();
+                } else {
+                    Supervisor.emitter.emit('removedUser');
+                    resolve();
+                }
+            });
+        })
+    }
+
+    public static async createGroupIfNeeded(): Promise<void> {
+        return new Promise(function (resolve, reject) {
+            linuxUser.getGroupInfo('purecore', function (err, data) {
+                if (err || data == null) {
+                    Supervisor.emitter.emit('creatingGroup');
+                    linuxUser.addGroup('purecore', function (err, data) {
+                        if (err) {
+                            reject();
+                        } else {
+                            Supervisor.emitter.emit('createdGroup');
+                            resolve();
+                        }
+                    })
+                } else {
+                    resolve();
+                }
+            })
+        });
+    }
+
+    public static async createUser(hostAuth): Promise<void> {
+        return new Promise(function (resolve, reject) {
+            DockerHelper.createGroupIfNeeded().then(() => {
+                Supervisor.emitter.emit('creatingUser');
+                linuxUser.addUser({ username: hostAuth.host.uuid, create_home: false, shell: null }, function (err, user) {
+                    if (err) {
+                        Supervisor.emitter.emit('errorCreatingUser');
+                        reject();
+                    }
+                    Supervisor.emitter.emit('createdUser');
+                    Supervisor.emitter.emit('addingUserToGroup');
+                    linuxUser.addUserToGroup(hostAuth.host.uuid, 'purecore', function (err, user) {
+                        if (err) {
+                            Supervisor.emitter.emit('errorAddingUserToGroup');
+                            reject();
+                        }
+                        Supervisor.emitter.emit('addedUserToGroup');
+                        Supervisor.emitter.emit('settingUserPassword');
+                        linuxUser.setPassword(hostAuth.host.uuid, hostAuth.hash, function (err, user) {
+                            if (err) {
+                                Supervisor.emitter.emit('errorSettingUserPassword');
+                                reject();
+                            }
+                            Supervisor.emitter.emit('setUserPassword');
+                            Supervisor.emitter.emit('settingUserRoot');
+                            try {
+                                chroot(`${Correlativity.hostedPath}${hostAuth.host.uuid}/`, hostAuth.host.uuid);
+                                Supervisor.emitter.emit('setUserRoot');
+                                resolve();
+                            } catch (error) {
+                                Supervisor.emitter.emit('errorSettingUserRoot');
+                                reject();
+                            }
+                        });
+                    });
+                });
+            }).catch((err) => {
+                Supervisor.emitter.emit('errorCreatingGroup');
+                reject();
+            })
         });
     }
 
@@ -103,17 +184,29 @@ class DockerHelper {
                     Binds: [
                         `${hostedPath}/${authRequest.host.uuid}:/data`
                     ],
-                    Cpus: authRequest.host.template.cores
+                    NanoCpus: authRequest.host.template.cores * 10 ^ 9
                 },
             }
 
             try {
                 DockerHelper.actuallyCreateContainer(true, opts).then((res) => {
                     if (res == null) {
-                        resolve();
+                        Supervisor.emitter.emit('registeringUser');
+                        DockerHelper.createUser(authRequest).then(() => {
+                            Supervisor.emitter.emit('registeredUser');
+                            resolve();
+                        }).catch(() => {
+                            Supervisor.emitter.emit('errorUserRegistration');
+                        })
                     } else {
                         res.then(() => {
-                            resolve();
+                            Supervisor.emitter.emit('registeringUser');
+                            DockerHelper.createUser(authRequest).then(() => {
+                                Supervisor.emitter.emit('registeredUser');
+                                resolve();
+                            }).catch(() => {
+                                Supervisor.emitter.emit('errorUserRegistration');
+                            })
                         }).catch((err) => {
                             Supervisor.emitter.emit('containerCreationError', err); reject();
                         })

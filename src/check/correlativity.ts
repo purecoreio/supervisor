@@ -28,6 +28,9 @@ class Correlativity {
                         });
                         if (!found) {
                             actionsToTake++;
+                            DockerHelper.removeUser(folder).catch(() => {
+                                //ignore
+                            })
                             fs.rename(Correlativity.hostedPath + folder + "/", Correlativity.tempPath + "noncorrelated-" + cryptotool.randomBytes(8).toString('hex') + "-" + folder + "/", function (err) {
                                 actionsToTake += -1;
                                 if (err) {
@@ -90,6 +93,9 @@ class Correlativity {
                             existingContainers.forEach(containerInfo => {
                                 if (!existingContainerIds.includes(containerInfo.name)) {
                                     // remove from existing containers (about to be deleted)
+                                    DockerHelper.removeUser(containerInfo.name).catch(() => {
+                                        //ignore
+                                    })
                                     existingContainers = existingContainers.filter(function (returnableObjects) {
                                         return returnableObjects.name !== containerInfo.name;
                                     });
