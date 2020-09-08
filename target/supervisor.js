@@ -153,39 +153,13 @@ class Correlativity {
                             fs.mkdirSync(tempPath);
                         let folders = [];
                         let actionsToTake = 0;
-                        fs.readdirSync(hostedPath).forEach(folder => {
-                            if (fs.lstatSync(hostedPath + folder).isDirectory()) {
-                                folders.push(folder);
-                                let found = false;
-                                existingContainers.forEach(existingContainer => {
-                                    if (existingContainer.name == folder) {
-                                        found = true;
-                                    }
-                                });
-                                if (!found) {
-                                    actionsToTake++;
-                                    fs.rename(hostedPath + folder + "/", tempPath + "noncorrelated-" + cryptotool.randomBytes(8).toString('hex') + "-" + folder + "/", function (err) {
-                                        actionsToTake += -1;
-                                        if (err) {
-                                            Supervisor.emitter.emit('errorMovingUncorrelatedFolder', new Error(err.code));
-                                            reject(err);
-                                        }
-                                        else {
-                                            Supervisor.emitter.emit('movedUncorrelatedFolder');
-                                        }
-                                        if (actionsToTake <= 0) {
-                                            resolve();
-                                        }
-                                    });
-                                }
-                            }
-                        });
+                        let idsChecked = false;
                         let existingContainerIds = [];
                         Supervisor.hostAuths.forEach(auth => {
                             existingContainerIds.push(auth.host.uuid);
                         });
                         existingContainers.forEach(containerInfo => {
-                            if (!folders.includes(containerInfo.name) && !existingContainerIds.includes(containerInfo.name)) {
+                            if (!existingContainerIds.includes(containerInfo.name)) {
                                 actionsToTake++;
                                 Supervisor.docker.getContainer(containerInfo.id).remove({
                                     force: true
@@ -199,14 +173,45 @@ class Correlativity {
                                         Supervisor.emitter.emit('removedUncorrelatedContainer');
                                     }
                                     if (actionsToTake <= 0) {
-                                        resolve();
+                                        idsChecked = true;
                                     }
                                 });
                             }
+                            if (actionsToTake == 0)
+                                idsChecked = true;
                         });
-                        if (actionsToTake <= 0) {
-                            resolve();
-                        }
+                        let checkInterval = setInterval(function () {
+                            if (idsChecked) {
+                                clearInterval(checkInterval);
+                                fs.readdirSync(hostedPath).forEach(folder => {
+                                    if (fs.lstatSync(hostedPath + folder).isDirectory()) {
+                                        folders.push(folder);
+                                        let found = false;
+                                        existingContainers.forEach(existingContainer => {
+                                            if (existingContainer.name == folder) {
+                                                found = true;
+                                            }
+                                        });
+                                        if (!found) {
+                                            actionsToTake++;
+                                            fs.rename(hostedPath + folder + "/", tempPath + "noncorrelated-" + cryptotool.randomBytes(8).toString('hex') + "-" + folder + "/", function (err) {
+                                                actionsToTake += -1;
+                                                if (err) {
+                                                    Supervisor.emitter.emit('errorMovingUncorrelatedFolder', new Error(err.code));
+                                                    reject(err);
+                                                }
+                                                else {
+                                                    Supervisor.emitter.emit('movedUncorrelatedFolder');
+                                                }
+                                                if (actionsToTake <= 0) {
+                                                    resolve();
+                                                }
+                                            });
+                                        }
+                                    }
+                                });
+                            }
+                        }, 100);
                     }
                     ;
                 });
