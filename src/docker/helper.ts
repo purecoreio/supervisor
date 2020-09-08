@@ -25,7 +25,6 @@ class DockerHelper {
     public static async getLogStream(container): Promise<any> {
         return new Promise(function (resolve, reject) {
             const logStream = new PassThrough();
-            const emitter = new EventEmitter();
             if (container != null) {
                 container.logs({
                     follow: true,
@@ -36,17 +35,13 @@ class DockerHelper {
                     stream.on('end', function () {
                         logStream.end('!stop');
                     })
-                    stream.on('data', function (data) {
-                        emitter.emit('console', data.toString('utf-8').trim())
-                    })
-                    resolve(emitter);
+                    resolve(logStream);
                 })
             } else {
                 throw new Error("Unknown container");
 
             }
         });
-        return emitter;
     }
 
     public static createContainer(authRequest): Promise<void> {
@@ -60,12 +55,35 @@ class DockerHelper {
         return new Promise(function (resolve, reject) {
             Supervisor.emitter.emit('creatingContainer');
 
+            const basePath = "/etc/purecore/";
+            const hostedPath = basePath + "hosted/";
+
             try {
+                const img = Supervisor.docker.getImage(authRequest.host.image);
+                console.log(img);
                 Supervisor.docker.createContainer({
-                    Image: authRequest.host.image, name: 'core-' + authRequest.host.uuid, Env: [
+                    Image: authRequest.host.image, name: 'core-' + authRequest.host.uuid,
+                    Env: [
                         "EULA=true",
-                    ], HostConfig: {
-                        PortBindings: { '25565/tcp': [{ HostPort: String(authRequest.host.port) }] },
+                    ],
+                    HostConfig: {
+                        PortBindings: {
+                            '25565/tcp': [
+                                { HostPort: String(authRequest.host.port) }
+                            ]
+                        },
+                        Memory: authRequest.host.template.memory,
+                        RestartPolicy: {
+                            name: 'unless-stopped',
+                            MaximumRetryCount: 10
+                        },
+                        Binds: [
+                            `${hostedPath}/${authRequest.host.uuid}:/data`
+                        ],
+                        StorageOpt: {
+                            size: authRequest.host.template.size
+                        },
+                        Cpus: authRequest.host.template.cores
                     },
                 }).then((container) => {
                     Supervisor.emitter.emit('createdContainer');
