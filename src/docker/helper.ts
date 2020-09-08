@@ -73,7 +73,6 @@ class DockerHelper {
                         Memory: authRequest.host.template.memory,
                         RestartPolicy: {
                             name: 'unless-stopped',
-                            MaximumRetryCount: 10
                         },
                         Binds: [
                             `${hostedPath}/${authRequest.host.uuid}:/data`
