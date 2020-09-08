@@ -58,31 +58,39 @@ class DockerHelper {
             const basePath = "/etc/purecore/";
             const hostedPath = basePath + "hosted/";
 
-            try {
-                Supervisor.docker.createContainer({
-                    Image: authRequest.host.image, name: 'core-' + authRequest.host.uuid,
-                    Env: [
-                        "EULA=true",
-                    ],
-                    HostConfig: {
-                        PortBindings: {
-                            '25565/tcp': [
-                                { HostPort: String(authRequest.host.port) }
-                            ]
-                        },
-                        Memory: authRequest.host.template.memory,
-                        RestartPolicy: {
-                            name: 'unless-stopped',
-                        },
-                        Binds: [
-                            `${hostedPath}/${authRequest.host.uuid}:/data`
-                        ],
-                        StorageOpt: {
-                            size: `${authRequest.host.template.size / 1073741824}G`
-                        },
-                        Cpus: authRequest.host.template.cores
+            let opts: any = {
+                Image: authRequest.host.image, name: 'core-' + authRequest.host.uuid,
+                Env: [
+                    "EULA=true",
+                ],
+                HostConfig: {
+                    PortBindings: {
+                        '25565/tcp': [
+                            { HostPort: String(authRequest.host.port) }
+                        ]
                     },
-                }).then((container) => {
+                    Memory: authRequest.host.template.memory,
+                    RestartPolicy: {
+                        name: 'unless-stopped',
+                    },
+                    Binds: [
+                        `${hostedPath}/${authRequest.host.uuid}:/data`
+                    ],
+                    Cpus: authRequest.host.template.cores
+                },
+            }
+
+            const info = Supervisor.docker.info();
+            if (info.Driver != 'overlay2') {
+                ConsoleUtil.setLoading(false, "Creating container with no size limit, please, use the overlay2 storage driver (currently using " + info.Driver + ")", false, true, false);
+            } else {
+                opts.HostConfig.StorageOpt = {
+                    size: `${authRequest.host.template.size / 1073741824}G`
+                }
+            }
+
+            try {
+                Supervisor.docker.createContainer(opts).then((container) => {
                     Supervisor.emitter.emit('createdContainer');
                     Supervisor.emitter.emit('startingNewContainer');
                     container.start().then(() => {
