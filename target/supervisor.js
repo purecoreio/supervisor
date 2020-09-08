@@ -414,8 +414,6 @@ let DockerHelper = /** @class */ (() => {
                 const basePath = "/etc/purecore/";
                 const hostedPath = basePath + "hosted/";
                 try {
-                    const img = Supervisor.docker.getImage(authRequest.host.image);
-                    console.log(img);
                     Supervisor.docker.createContainer({
                         Image: authRequest.host.image, name: 'core-' + authRequest.host.uuid,
                         Env: [
@@ -436,7 +434,7 @@ let DockerHelper = /** @class */ (() => {
                                 `${hostedPath}/${authRequest.host.uuid}:/data`
                             ],
                             StorageOpt: {
-                                size: authRequest.host.template.size
+                                size: `${authRequest.host.template.size / 1073741824}G`
                             },
                             Cpus: authRequest.host.template.cores
                         },
