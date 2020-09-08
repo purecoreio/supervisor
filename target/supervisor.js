@@ -196,37 +196,42 @@ let Correlativity = /** @class */ (() => {
                             Supervisor.hostAuths.forEach(auth => {
                                 existingContainerIds.push(auth.host.uuid);
                             });
-                            existingContainers.forEach(containerInfo => {
-                                if (!existingContainerIds.includes(containerInfo.name)) {
-                                    actionsToTake++;
-                                    Supervisor.docker.getContainer(containerInfo.id).remove({
-                                        force: true
-                                    }, (err) => {
-                                        actionsToTake += -1;
-                                        if (err) {
-                                            Supervisor.emitter.emit('errorRemovingUncorrelatedContainer');
-                                            reject(err);
-                                        }
-                                        else {
-                                            Supervisor.emitter.emit('removedUncorrelatedContainer');
-                                        }
-                                        if (actionsToTake <= 0) {
-                                            Correlativity.checkFilesystem(existingContainers).then(() => {
-                                                resolve();
-                                            }).catch((err) => {
+                            if (existingContainers.length <= 0) {
+                                resolve();
+                            }
+                            else {
+                                existingContainers.forEach(containerInfo => {
+                                    if (!existingContainerIds.includes(containerInfo.name)) {
+                                        actionsToTake++;
+                                        Supervisor.docker.getContainer(containerInfo.id).remove({
+                                            force: true
+                                        }, (err) => {
+                                            actionsToTake += -1;
+                                            if (err) {
+                                                Supervisor.emitter.emit('errorRemovingUncorrelatedContainer');
                                                 reject(err);
-                                            });
-                                        }
-                                    });
-                                }
-                                if (actionsToTake == 0) {
-                                    Correlativity.checkFilesystem(existingContainers).then(() => {
-                                        resolve();
-                                    }).catch((err) => {
-                                        reject(err);
-                                    });
-                                }
-                            });
+                                            }
+                                            else {
+                                                Supervisor.emitter.emit('removedUncorrelatedContainer');
+                                            }
+                                            if (actionsToTake <= 0) {
+                                                Correlativity.checkFilesystem(existingContainers).then(() => {
+                                                    resolve();
+                                                }).catch((err) => {
+                                                    reject(err);
+                                                });
+                                            }
+                                        });
+                                    }
+                                    if (actionsToTake == 0) {
+                                        Correlativity.checkFilesystem(existingContainers).then(() => {
+                                            resolve();
+                                        }).catch((err) => {
+                                            reject(err);
+                                        });
+                                    }
+                                });
+                            }
                         }
                         ;
                     });
