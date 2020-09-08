@@ -17,7 +17,7 @@ class SocketServer {
             client.on('console', extra => {
                 if (SocketServer.getHost(client) != null && SocketServer.isAuthenticated(client)) {
                     try {
-                        DockerHelper.getContainer(SocketServer.getHost(client)).then((container) => {
+                        DockerHelper.getContainer(SocketServer.getHost(client).host).then((container) => {
                             DockerHelper.getLogStream(container).then((logStream) => {
                                 logStream.on('data', (data) => {
                                     if (!client.connected) {
@@ -44,7 +44,7 @@ class SocketServer {
     public static getHost(client) {
         for (let index = 0; index < SocketServer.authenticatedHosts.length; index++) {
             const element = SocketServer.authenticatedHosts[index];
-            if (element.client == client.id) return element.host; break;
+            if (element.client == client.id) return element.hostAuth; break;
         }
     }
 
