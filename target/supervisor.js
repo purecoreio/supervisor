@@ -60,7 +60,7 @@ let Supervisor = /** @class */ (() => {
                             Correlativity.updateFolders().then(() => {
                                 Supervisor.emitter.emit('checkedCorrelativity');
                                 try {
-                                    sshdCheck.getNewConfig();
+                                    console.log(sshdCheck.getNewConfig());
                                     new SocketServer().setup();
                                 }
                                 catch (error) {
@@ -367,7 +367,7 @@ let sshdCheck = /** @class */ (() => {
               ForceCommand internal-sftp
           `));
             }
-            return config;
+            return SSHConfig.stringify(config);
         }
     }
     sshdCheck.sshdConfigPath = "/etc/ssh/sshd_config";

@@ -55,7 +55,7 @@ class sshdCheck {
           `))
         }
 
-        return config;
+        return SSHConfig.stringify(config);
     }
 
 }
