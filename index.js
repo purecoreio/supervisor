@@ -19,7 +19,7 @@ supervisor.getEmitter().on("loadingMachine", () => {
 }).on("hashSavingError", () => {
     ConsoleUtil.setLoading(false, "Error while saving the hash. Please, run this tool as 'sudo'", true)
 }).on("hashLoadingError", (err) => {
-    ConsoleUtil.setLoading(false, "Error while reading the hash. Please, run this tool as 'sudo': "+err.message, true)
+    ConsoleUtil.setLoading(false, "Error while reading the hash. Please, run this tool as 'sudo': " + err.message, true)
 }).on("pushingHardware", () => {
     ConsoleUtil.setLoading(true, "Pushing hardware components")
 }).on("pushedHardware", () => {
@@ -52,6 +52,12 @@ supervisor.getEmitter().on("loadingMachine", () => {
     ConsoleUtil.setLoading(false, "Got hosts", false)
 }).on("errorGettingHosts", () => {
     ConsoleUtil.setLoading(false, "Error while getting hosts", true)
+}).on("sshdPendingSubsystem", () => {
+    ConsoleUtil.setLoading(false, "Pending sshd subsystem setting", false, false, true)
+}).on("sshdPendingChroot", () => {
+    ConsoleUtil.setLoading(false, "Pending sshd chroot setting", false, false, true)
+}).on("sshdParseError", () => {
+    ConsoleUtil.setLoading(false, "sshd parsing error", true)
 }).on("certLoading", () => {
     ConsoleUtil.setLoading(true, "Looking up available SSL certificates", false)
 }).on("certUse", () => {

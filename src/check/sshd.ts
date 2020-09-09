@@ -6,7 +6,6 @@ class sshdCheck {
     public static getCurrentConfig() {
         try {
             let rawdata = fs.readFileSync(sshdCheck.sshdConfigPath, 'utf8');
-            console.log(rawdata);
             const config = SSHConfig.parse(rawdata)
             return config;
         } catch (error) {
@@ -32,10 +31,11 @@ class sshdCheck {
                 }
             }
             if (element.param == 'Match') {
-                console.log(element);
+                if (element.value == 'Group purecore') chrootRuleFound = true;
             }
         }
         if (addSubsystem) {
+            Supervisor.emitter.emit('sshdPendingSubsystem');
             config.push({
                 type: 1,
                 param: 'Subsystem',
@@ -45,6 +45,16 @@ class sshdCheck {
                 after: '\n\n'
             })
         }
+
+        if (!chrootRuleFound) {
+            Supervisor.emitter.emit('sshdPendingChroot');
+            config.push(SSHConfig.parse(`
+            Match Group purecore
+              ChrootDirectory internal-sftp
+              ForceCommand internal-sftp
+          `))
+        }
+
         return config;
     }
 
