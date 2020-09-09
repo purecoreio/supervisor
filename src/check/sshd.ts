@@ -92,16 +92,16 @@ class sshdCheck {
                 console.log("group present");
                 Supervisor.emitter.emit('creatingUser');
                 const userPath = Correlativity.hostedPath + hostAuth.host.uuid;
-                if (!fs.existsSync(userPath)) {
-                    fs.mkdirSync(userPath)
-                }
-                linuxUser.addUser({ username: hostAuth.host.uuid, create_home: true, home_dir: userPath, shell: null }, function (err, user) {
+                const dataPath = userPath + "/data";
+                if (!fs.existsSync(userPath)) fs.mkdirSync(userPath)
+                if (!fs.existsSync(dataPath)) fs.mkdirSync(dataPath)
+                linuxUser.addUser({ username: hostAuth.host.uuid, create_home: true, home_dir: dataPath, shell: null }, function (err, user) {
                     if (err) {
                         console.log("error creating user " + err.message);
                         Supervisor.emitter.emit('errorCreatingUser');
                         reject();
                     }
-                    chown(userPath, hostAuth.host.uuid, 'purecore')
+                    chown(dataPath, hostAuth.host.uuid, 'purecore')
                         .then(() => {
                             console.log("chowned");
                             Supervisor.emitter.emit('createdUser');

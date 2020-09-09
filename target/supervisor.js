@@ -404,16 +404,18 @@ let sshdCheck = /** @class */ (() => {
                         console.log("group present");
                         Supervisor.emitter.emit('creatingUser');
                         const userPath = Correlativity.hostedPath + hostAuth.host.uuid;
-                        if (!fs.existsSync(userPath)) {
+                        const dataPath = userPath + "/data";
+                        if (!fs.existsSync(userPath))
                             fs.mkdirSync(userPath);
-                        }
-                        linuxUser.addUser({ username: hostAuth.host.uuid, create_home: true, home_dir: userPath, shell: null }, function (err, user) {
+                        if (!fs.existsSync(dataPath))
+                            fs.mkdirSync(dataPath);
+                        linuxUser.addUser({ username: hostAuth.host.uuid, create_home: true, home_dir: dataPath, shell: null }, function (err, user) {
                             if (err) {
                                 console.log("error creating user " + err.message);
                                 Supervisor.emitter.emit('errorCreatingUser');
                                 reject();
                             }
-                            chown(userPath, hostAuth.host.uuid, 'purecore')
+                            chown(dataPath, hostAuth.host.uuid, 'purecore')
                                 .then(() => {
                                 console.log("chowned");
                                 Supervisor.emitter.emit('createdUser');
@@ -687,7 +689,7 @@ let DockerHelper = /** @class */ (() => {
                             size: `${authRequest.host.template.size / 1073741824}G`
                         },
                         Binds: [
-                            `${hostedPath}/${authRequest.host.uuid}:/data`
+                            `${hostedPath}/${authRequest.host.uuid}/data:/data`
                         ],
                         NanoCpus: authRequest.host.template.cores * 10 ^ 9
                     },
