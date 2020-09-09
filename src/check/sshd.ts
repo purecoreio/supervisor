@@ -30,7 +30,7 @@ class sshdCheck {
                     addSubsystem = true;
                 }
             }
-            if (element.param == 'Match') {
+            if (element.param == 'Match' && element.type != 2) {
                 if (element.value == 'Group purecore') chrootRuleFound = true;
             }
         }
