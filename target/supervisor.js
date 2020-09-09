@@ -318,7 +318,8 @@ let sshdCheck = /** @class */ (() => {
     class sshdCheck {
         static getCurrentConfig() {
             try {
-                let rawdata = fs.readFileSync(sshdCheck.sshdConfigPath);
+                let rawdata = fs.readFileSync(sshdCheck.sshdConfigPath, 'utf8');
+                console.log(rawdata);
                 const config = SSHConfig.parse(rawdata);
                 return config;
             }
