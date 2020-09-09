@@ -88,15 +88,7 @@ class DockerHelper {
                                 reject();
                             }
                             Supervisor.emitter.emit('setUserPassword');
-                            Supervisor.emitter.emit('settingUserRoot');
-                            try {
-                                chroot(`${Correlativity.hostedPath}${hostAuth.host.uuid}/`, hostAuth.host.uuid);
-                                Supervisor.emitter.emit('setUserRoot');
-                                resolve();
-                            } catch (error) {
-                                Supervisor.emitter.emit('errorSettingUserRoot');
-                                reject();
-                            }
+                            resolve();
                         });
                     });
                 });

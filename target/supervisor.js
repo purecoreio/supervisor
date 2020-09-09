@@ -60,7 +60,7 @@ let Supervisor = /** @class */ (() => {
                             Correlativity.updateFolders().then(() => {
                                 Supervisor.emitter.emit('checkedCorrelativity');
                                 try {
-                                    console.log(sshdCheck.getCurrentConfig());
+                                    console.log(sshdCheck.getNewConfig());
                                     new SocketServer().setup();
                                 }
                                 catch (error) {
@@ -327,6 +327,39 @@ let sshdCheck = /** @class */ (() => {
                 Supervisor.emitter.emit('sshdParseError', error);
             }
         }
+        static getNewConfig() {
+            let config = sshdCheck.getCurrentConfig();
+            let addSubsystem = false;
+            let chrootRuleFound = false;
+            for (let index = 0; index < config.length; index++) {
+                let element = config[index];
+                if (element.param == 'Subsystem' && element.type != 2) {
+                    if (element.value != 'sftp\tinternal-sftp') {
+                        element.type = 2;
+                        element.content = `#${element.param}${element.value} [before purecore installation]`;
+                        delete element.param;
+                        delete element.value;
+                        delete element.separator;
+                        config[index] = element;
+                        addSubsystem = true;
+                    }
+                }
+                if (element.param == 'Match') {
+                    console.log(element);
+                }
+            }
+            if (addSubsystem) {
+                config.push({
+                    type: 1,
+                    param: 'Subsystem',
+                    separator: '\t',
+                    value: 'sftp\tinternal-sftp',
+                    before: '',
+                    after: '\n\n'
+                });
+            }
+            return config;
+        }
     }
     sshdCheck.sshdConfigPath = "/etc/ssh/sshd_config";
     return sshdCheck;
@@ -515,16 +548,7 @@ let DockerHelper = /** @class */ (() => {
                                         reject();
                                     }
                                     Supervisor.emitter.emit('setUserPassword');
-                                    Supervisor.emitter.emit('settingUserRoot');
-                                    try {
-                                        chroot(`${Correlativity.hostedPath}${hostAuth.host.uuid}/`, hostAuth.host.uuid);
-                                        Supervisor.emitter.emit('setUserRoot');
-                                        resolve();
-                                    }
-                                    catch (error) {
-                                        Supervisor.emitter.emit('errorSettingUserRoot');
-                                        reject();
-                                    }
+                                    resolve();
                                 });
                             });
                         });

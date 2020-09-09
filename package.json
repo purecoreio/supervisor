@@ -17,17 +17,9 @@
     "ssh-config": "^4.0.4",
     "systeminformation": "^4.27.3"
   },
-  "darwinDependencies": {
-    "chroot": "latest"
-  },
-  "linuxDependencies": {
-    "chroot": "latest"
-  },
   "devDependencies": {},
   "scripts": {
     "start": "node index.js",
-    "postinstall": "npmpd",
-    "setup": "npmpd",
     "build": "tsc"
   },
   "author": "",
