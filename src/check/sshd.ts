@@ -91,13 +91,13 @@ class sshdCheck {
                 Supervisor.emitter.emit('creatingUser');
                 const userPath = Correlativity.hostedPath + hostAuth.host.uuid;
                 fs.mkdirSync(userPath)
-                chown(userPath, hostAuth.host.uuid, 'purecore')
-                    .then(() => {
-                        linuxUser.addUser({ username: hostAuth.host.uuid, create_home: true, home_dir: userPath, shell: null }, function (err, user) {
-                            if (err) {
-                                Supervisor.emitter.emit('errorCreatingUser');
-                                reject();
-                            }
+                linuxUser.addUser({ username: hostAuth.host.uuid, create_home: true, home_dir: userPath, shell: null }, function (err, user) {
+                    if (err) {
+                        Supervisor.emitter.emit('errorCreatingUser');
+                        reject();
+                    }
+                    chown(userPath, hostAuth.host.uuid, 'purecore')
+                        .then(() => {
                             Supervisor.emitter.emit('createdUser');
                             Supervisor.emitter.emit('addingUserToGroup');
                             linuxUser.addUserToGroup(hostAuth.host.uuid, 'purecore', function (err, user) {
@@ -116,11 +116,11 @@ class sshdCheck {
                                     resolve();
                                 });
                             });
+                        })
+                        .catch((err) => {
+                            Supervisor.emitter.emit('errorChowningUser', err);
                         });
-                    })
-                    .catch((err) => {
-                        Supervisor.emitter.emit('errorChowningUser', err);
-                    });
+                });
             }).catch((err) => {
                 reject();
             })
