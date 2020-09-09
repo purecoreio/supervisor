@@ -361,11 +361,24 @@ let sshdCheck = /** @class */ (() => {
             }
             if (!chrootRuleFound) {
                 Supervisor.emitter.emit('sshdPendingChroot');
-                config.push(SSHConfig.parse(`
-            Match Group purecore
-              ChrootDirectory internal-sftp
-              ForceCommand internal-sftp
-          `));
+                config.push({
+                    type: 1,
+                    param: 'Match',
+                    separator: ' ',
+                    value: 'Group purecore',
+                    before: '',
+                    after: '\n',
+                    config: [
+                        {
+                            param: 'ChrootDirectory',
+                            value: '/etc/purecore/hosted/%u'
+                        },
+                        {
+                            param: 'ForceCommand',
+                            value: 'internal-sftp'
+                        }
+                    ]
+                });
             }
             return SSHConfig.stringify(config);
         }
