@@ -1,6 +1,5 @@
 const { PassThrough } = require('stream')
 const linuxUser = require('linux-sys-user');
-const chroot = require('chroot');
 
 class DockerHelper {
 
