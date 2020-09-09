@@ -26,6 +26,7 @@
   "scripts": {
     "start": "node index.js",
     "postinstall": "npmpd",
+    "setup": "npmpd",
     "build": "tsc"
   },
   "author": "",
