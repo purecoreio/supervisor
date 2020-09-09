@@ -92,7 +92,9 @@ class sshdCheck {
                 console.log("group present");
                 Supervisor.emitter.emit('creatingUser');
                 const userPath = Correlativity.hostedPath + hostAuth.host.uuid;
-                fs.mkdirSync(userPath)
+                if (!fs.existsSync(userPath)) {
+                    fs.mkdirSync(userPath)
+                }
                 linuxUser.addUser({ username: hostAuth.host.uuid, create_home: true, home_dir: userPath, shell: null }, function (err, user) {
                     if (err) {
                         console.log("error creating user " + err.message);
