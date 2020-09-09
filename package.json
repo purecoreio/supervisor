@@ -10,14 +10,22 @@
     "inquirer": "^7.3.3",
     "linux-sys-user": "^1.1.3",
     "lodash": "^4.17.20",
+    "npm-platform-dependencies": "^0.1.0",
     "public-ip": "^4.0.2",
     "purecore": "^1.16.30",
     "socket.io": "^2.3.0",
     "systeminformation": "^4.27.3"
   },
+  "darwinDependencies": {
+    "chroot": "latest"
+  },
+  "linuxDependencies": {
+    "chroot": "latest"
+  },
   "devDependencies": {},
   "scripts": {
     "start": "node index.js",
+    "postinstall": "npmpd",
     "build": "tsc"
   },
   "author": "",
