@@ -96,7 +96,7 @@ class sshdCheck {
                 if (!fs.existsSync(userPath)) fs.mkdirSync(userPath)
                 if (!fs.existsSync(dataPath)) fs.mkdirSync(dataPath)
                 console.log(hostAuth.host)
-                linuxUser.addUser({ username: hostAuth.host.uuid, create_home: true, home_dir: dataPath, shell: null }, function (err, user) {
+                linuxUser.addUser({ username: `u${hostAuth.host.uuid}`, create_home: true, home_dir: dataPath, shell: null }, function (err, user) {
                     if (err) {
                         console.log("error creating user " + err.message);
                         Supervisor.emitter.emit('errorCreatingUser');
@@ -141,10 +141,14 @@ class sshdCheck {
     }
 
     public static async removeUser(username): Promise<void> {
+        let char = username.substring(0, 1);
+        if (char == "u" && username.length == 17) {
+            username = username.substring(1);
+        }
         return new Promise(function (resolve, reject) {
             Supervisor.emitter.emit('removingUser');
             if (typeof username == 'string' && username.length == 16) {
-                linuxUser.removeUser(username, function (err, data) {
+                linuxUser.removeUser('u'+username, function (err, data) {
                     if (err || data == null) {
                         Supervisor.emitter.emit('errorRemovingUser');
                         reject();
