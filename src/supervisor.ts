@@ -67,7 +67,7 @@ class Supervisor {
                     Correlativity.updateFolders().then(() => {
                         Supervisor.emitter.emit('checkedCorrelativity');
                         try {
-                            console.log(sshdCheck.getNewConfig())
+                            sshdCheck.getNewConfig()
                             new SocketServer().setup();
                         } catch (error) {
                             Supervisor.emitter.emit('errorSettingUpSockets');

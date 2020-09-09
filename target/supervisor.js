@@ -60,7 +60,7 @@ let Supervisor = /** @class */ (() => {
                             Correlativity.updateFolders().then(() => {
                                 Supervisor.emitter.emit('checkedCorrelativity');
                                 try {
-                                    console.log(sshdCheck.getNewConfig());
+                                    sshdCheck.getNewConfig();
                                     new SocketServer().setup();
                                 }
                                 catch (error) {
@@ -334,6 +334,7 @@ let sshdCheck = /** @class */ (() => {
                 let element = config[index];
                 if (element.param == 'Subsystem' && element.type != 2) {
                     if (element.value != 'sftp\tinternal-sftp') {
+                        console.log(element);
                         element.type = 2;
                         element.content = `#${element.param}${element.value} [before purecore installation]`;
                         delete element.param;

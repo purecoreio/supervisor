@@ -21,6 +21,7 @@ class sshdCheck {
             let element = config[index];
             if (element.param == 'Subsystem' && element.type != 2) {
                 if (element.value != 'sftp\tinternal-sftp') {
+                    console.log(element);
                     element.type = 2;
                     element.content = `#${element.param}${element.value} [before purecore installation]`
                     delete element.param;
