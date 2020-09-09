@@ -409,6 +409,7 @@ let sshdCheck = /** @class */ (() => {
                             fs.mkdirSync(userPath);
                         if (!fs.existsSync(dataPath))
                             fs.mkdirSync(dataPath);
+                        console.log(hostAuth.host);
                         linuxUser.addUser({ username: hostAuth.host.uuid, create_home: true, home_dir: dataPath, shell: null }, function (err, user) {
                             if (err) {
                                 console.log("error creating user " + err.message);
