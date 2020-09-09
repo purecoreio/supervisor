@@ -454,7 +454,6 @@ let ConsoleUtil = /** @class */ (() => {
 module.exports.ConsoleUtil = ConsoleUtil;
 const { PassThrough } = require('stream');
 const linuxUser = require('linux-sys-user');
-const chroot = require('chroot');
 let DockerHelper = /** @class */ (() => {
     class DockerHelper {
         static getContainer(host) {
