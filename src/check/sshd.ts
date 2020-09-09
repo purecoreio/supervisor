@@ -1,4 +1,7 @@
 const SSHConfig = require('ssh-config')
+const linuxUser = require('linux-sys-user');
+const chown = require('chown');
+
 class sshdCheck {
 
     public static sshdConfigPath = "/etc/ssh/sshd_config";
@@ -60,22 +63,109 @@ class sshdCheck {
         return SSHConfig.stringify(config);
     }
 
-    public static applyConfig(): Promise<void> {
+    public static async createGroupIfNeeded(): Promise<void> {
         return new Promise(function (resolve, reject) {
-            let newConfig = sshdCheck.getNewConfig();
-            if (SSHConfig.stringify(sshdCheck.getCurrentConfig()) != newConfig) {
-                Supervisor.emitter.emit('sshdConfigurationChanging');
-                fs.writeFile(sshdCheck.sshdConfigPath, newConfig, 'utf8', function (err) {
-                    if (err) {
-                        Supervisor.emitter.emit('sshdConfigurationChangeError');
-                        reject();
-                    }
-                    Supervisor.emitter.emit('sshdConfigurationChanged');
+            linuxUser.getGroupInfo('purecore', function (err, data) {
+                if (err || data == null) {
+                    Supervisor.emitter.emit('creatingGroup');
+                    linuxUser.addGroup('purecore', function (err, data) {
+                        if (err) {
+                            Supervisor.emitter.emit('errorCreatingGroup');
+                            reject();
+                        } else {
+                            Supervisor.emitter.emit('createdGroup');
+                            resolve();
+                        }
+                    })
+                } else {
                     resolve();
+                }
+            })
+        });
+    }
+
+
+    public static async createUser(hostAuth): Promise<void> {
+        return new Promise(function (resolve, reject) {
+            sshdCheck.createGroupIfNeeded().then(() => {
+                Supervisor.emitter.emit('creatingUser');
+                const userPath = Correlativity.hostedPath + hostAuth.host.uuid;
+                fs.mkdirSync(userPath)
+                chown(userPath, hostAuth.host.uuid, 'purecore')
+                    .then(() => {
+                        linuxUser.addUser({ username: hostAuth.host.uuid, create_home: true, home_dir: userPath, shell: null }, function (err, user) {
+                            if (err) {
+                                Supervisor.emitter.emit('errorCreatingUser');
+                                reject();
+                            }
+                            Supervisor.emitter.emit('createdUser');
+                            Supervisor.emitter.emit('addingUserToGroup');
+                            linuxUser.addUserToGroup(hostAuth.host.uuid, 'purecore', function (err, user) {
+                                if (err) {
+                                    Supervisor.emitter.emit('errorAddingUserToGroup');
+                                    reject();
+                                }
+                                Supervisor.emitter.emit('addedUserToGroup');
+                                Supervisor.emitter.emit('settingUserPassword');
+                                linuxUser.setPassword(hostAuth.host.uuid, hostAuth.hash, function (err, user) {
+                                    if (err) {
+                                        Supervisor.emitter.emit('errorSettingUserPassword');
+                                        reject();
+                                    }
+                                    Supervisor.emitter.emit('setUserPassword');
+                                    resolve();
+                                });
+                            });
+                        });
+                    })
+                    .catch((err) => {
+                        Supervisor.emitter.emit('errorChowningUser', err);
+                    });
+            }).catch((err) => {
+                reject();
+            })
+        });
+    }
+
+    public static async removeUser(username): Promise<void> {
+        return new Promise(function (resolve, reject) {
+            Supervisor.emitter.emit('removingUser');
+            if (typeof username == 'string' && username.length == 16) {
+                linuxUser.removeUser(username, function (err, data) {
+                    if (err || data == null) {
+                        Supervisor.emitter.emit('errorRemovingUser');
+                        reject();
+                    } else {
+                        Supervisor.emitter.emit('removedUser');
+                        resolve();
+                    }
                 });
             } else {
-                resolve();
+                reject();
             }
+        })
+    }
+
+    public static applyConfig(): Promise<void> {
+        return new Promise(function (resolve, reject) {
+            sshdCheck.createGroupIfNeeded().then(() => {
+                let newConfig = sshdCheck.getNewConfig();
+                if (SSHConfig.stringify(sshdCheck.getCurrentConfig()) != newConfig) {
+                    Supervisor.emitter.emit('sshdConfigurationChanging');
+                    fs.writeFile(sshdCheck.sshdConfigPath, newConfig, 'utf8', function (err) {
+                        if (err) {
+                            Supervisor.emitter.emit('sshdConfigurationChangeError');
+                            reject();
+                        }
+                        Supervisor.emitter.emit('sshdConfigurationChanged');
+                        resolve();
+                    });
+                } else {
+                    resolve();
+                }
+            }).catch(() => {
+                Supervisor.emitter.emit('errorCreatingGroup');
+            })
         })
     }
 

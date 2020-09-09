@@ -62,6 +62,12 @@ supervisor.getEmitter().on("loadingMachine", () => {
     ConsoleUtil.setLoading(true, "Updating sshd config", false)
 }).on("sshdConfigurationChangeError", () => {
     ConsoleUtil.setLoading(false, "Error while updating sshd config", true)
+}).on("errorCreatingGroup", () => {
+    ConsoleUtil.setLoading(false, "Error while creating the permission group", true)
+}).on("creatingGroup", () => {
+    ConsoleUtil.setLoading(true, "Creating permission group", false, false, true)
+}).on("createdGroup", () => {
+    ConsoleUtil.setLoading(false, "Created permission group", false, false, true)
 }).on("sshdConfigurationChanged", () => {
     ConsoleUtil.setLoading(false, "Updated sshd config", false)
 }).on("certLoading", () => {

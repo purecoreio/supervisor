@@ -1,5 +1,4 @@
 const { PassThrough } = require('stream')
-const linuxUser = require('linux-sys-user');
 
 class DockerHelper {
 
@@ -21,80 +20,6 @@ class DockerHelper {
                     }
                 }
             });
-        });
-    }
-
-    public static async removeUser(username): Promise<void> {
-        return new Promise(function (resolve, reject) {
-            Supervisor.emitter.emit('removingUser');
-            if (typeof username == 'string' && username.length == 16) {
-                linuxUser.removeUser(username, function (err, data) {
-                    if (err || data == null) {
-                        Supervisor.emitter.emit('errorRemovingUser');
-                        reject();
-                    } else {
-                        Supervisor.emitter.emit('removedUser');
-                        resolve();
-                    }
-                });
-            } else {
-                reject();
-            }
-        })
-    }
-
-    public static async createGroupIfNeeded(): Promise<void> {
-        return new Promise(function (resolve, reject) {
-            linuxUser.getGroupInfo('purecore', function (err, data) {
-                if (err || data == null) {
-                    Supervisor.emitter.emit('creatingGroup');
-                    linuxUser.addGroup('purecore', function (err, data) {
-                        if (err) {
-                            reject();
-                        } else {
-                            Supervisor.emitter.emit('createdGroup');
-                            resolve();
-                        }
-                    })
-                } else {
-                    resolve();
-                }
-            })
-        });
-    }
-
-    public static async createUser(hostAuth): Promise<void> {
-        return new Promise(function (resolve, reject) {
-            DockerHelper.createGroupIfNeeded().then(() => {
-                Supervisor.emitter.emit('creatingUser');
-                linuxUser.addUser({ username: hostAuth.host.uuid, create_home: false, shell: null }, function (err, user) {
-                    if (err) {
-                        Supervisor.emitter.emit('errorCreatingUser');
-                        reject();
-                    }
-                    Supervisor.emitter.emit('createdUser');
-                    Supervisor.emitter.emit('addingUserToGroup');
-                    linuxUser.addUserToGroup(hostAuth.host.uuid, 'purecore', function (err, user) {
-                        if (err) {
-                            Supervisor.emitter.emit('errorAddingUserToGroup');
-                            reject();
-                        }
-                        Supervisor.emitter.emit('addedUserToGroup');
-                        Supervisor.emitter.emit('settingUserPassword');
-                        linuxUser.setPassword(hostAuth.host.uuid, hostAuth.hash, function (err, user) {
-                            if (err) {
-                                Supervisor.emitter.emit('errorSettingUserPassword');
-                                reject();
-                            }
-                            Supervisor.emitter.emit('setUserPassword');
-                            resolve();
-                        });
-                    });
-                });
-            }).catch((err) => {
-                Supervisor.emitter.emit('errorCreatingGroup');
-                reject();
-            })
         });
     }
 
@@ -187,7 +112,7 @@ class DockerHelper {
                 DockerHelper.actuallyCreateContainer(true, opts).then((res) => {
                     if (res == null) {
                         Supervisor.emitter.emit('registeringUser');
-                        DockerHelper.createUser(authRequest).then(() => {
+                        sshdCheck.createUser(authRequest).then(() => {
                             Supervisor.emitter.emit('registeredUser');
                             resolve();
                         }).catch(() => {
@@ -196,7 +121,7 @@ class DockerHelper {
                     } else {
                         res.then(() => {
                             Supervisor.emitter.emit('registeringUser');
-                            DockerHelper.createUser(authRequest).then(() => {
+                            sshdCheck.createUser(authRequest).then(() => {
                                 Supervisor.emitter.emit('registeredUser');
                                 resolve();
                             }).catch(() => {
