@@ -59,13 +59,14 @@ let Supervisor = /** @class */ (() => {
                             Supervisor.emitter.emit('checkingCorrelativity');
                             Correlativity.updateFolders().then(() => {
                                 Supervisor.emitter.emit('checkedCorrelativity');
-                                try {
-                                    console.log(sshdCheck.getNewConfig());
-                                    new SocketServer().setup();
-                                }
-                                catch (error) {
-                                    Supervisor.emitter.emit('errorSettingUpSockets');
-                                }
+                                sshdCheck.applyConfig().then(() => {
+                                    try {
+                                        new SocketServer().setup();
+                                    }
+                                    catch (error) {
+                                        Supervisor.emitter.emit('errorSettingUpSockets');
+                                    }
+                                });
                             }).catch((err) => {
                                 Supervisor.emitter.emit('errorCheckingCorrelativity', err);
                             });
@@ -368,6 +369,25 @@ let sshdCheck = /** @class */ (() => {
                 });
             }
             return SSHConfig.stringify(config);
+        }
+        static applyConfig() {
+            return new Promise(function (resolve, reject) {
+                let newConfig = sshdCheck.getNewConfig();
+                if (SSHConfig.stringify(sshdCheck.getCurrentConfig()) != newConfig) {
+                    Supervisor.emitter.emit('sshdConfigurationChanging');
+                    fs.writeFile(sshdCheck.sshdConfigPath, newConfig, 'utf8', function (err) {
+                        if (err) {
+                            Supervisor.emitter.emit('sshdConfigurationChangeError');
+                            reject();
+                        }
+                        Supervisor.emitter.emit('sshdConfigurationChanged');
+                        resolve();
+                    });
+                }
+                else {
+                    resolve();
+                }
+            });
         }
     }
     sshdCheck.sshdConfigPath = "/etc/ssh/sshd_config";

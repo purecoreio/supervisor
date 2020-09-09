@@ -58,6 +58,12 @@ supervisor.getEmitter().on("loadingMachine", () => {
     ConsoleUtil.setLoading(false, "Pending sshd chroot setting", false, false, true)
 }).on("sshdParseError", () => {
     ConsoleUtil.setLoading(false, "sshd parsing error", true)
+}).on("sshdConfigurationChanging", () => {
+    ConsoleUtil.setLoading(true, "Updating sshd config", false)
+}).on("sshdConfigurationChangeError", () => {
+    ConsoleUtil.setLoading(false, "Error while updating sshd config", true)
+}).on("sshdConfigurationChanged", () => {
+    ConsoleUtil.setLoading(false, "Updated sshd config", false)
 }).on("certLoading", () => {
     ConsoleUtil.setLoading(true, "Looking up available SSL certificates", false)
 }).on("certUse", () => {

@@ -66,12 +66,13 @@ class Supervisor {
                     Supervisor.emitter.emit('checkingCorrelativity');
                     Correlativity.updateFolders().then(() => {
                         Supervisor.emitter.emit('checkedCorrelativity');
-                        try {
-                            console.log(sshdCheck.getNewConfig())
-                            new SocketServer().setup();
-                        } catch (error) {
-                            Supervisor.emitter.emit('errorSettingUpSockets');
-                        }
+                        sshdCheck.applyConfig().then(() => {
+                            try {
+                                new SocketServer().setup();
+                            } catch (error) {
+                                Supervisor.emitter.emit('errorSettingUpSockets');
+                            }
+                        })
                     }).catch((err) => {
                         Supervisor.emitter.emit('errorCheckingCorrelativity', err);
                     })

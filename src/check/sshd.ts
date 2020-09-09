@@ -60,4 +60,23 @@ class sshdCheck {
         return SSHConfig.stringify(config);
     }
 
+    public static applyConfig(): Promise<void> {
+        return new Promise(function (resolve, reject) {
+            let newConfig = sshdCheck.getNewConfig();
+            if (SSHConfig.stringify(sshdCheck.getCurrentConfig()) != newConfig) {
+                Supervisor.emitter.emit('sshdConfigurationChanging');
+                fs.writeFile(sshdCheck.sshdConfigPath, newConfig, 'utf8', function (err) {
+                    if (err) {
+                        Supervisor.emitter.emit('sshdConfigurationChangeError');
+                        reject();
+                    }
+                    Supervisor.emitter.emit('sshdConfigurationChanged');
+                    resolve();
+                });
+            } else {
+                resolve();
+            }
+        })
+    }
+
 }
