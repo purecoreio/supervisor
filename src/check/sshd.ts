@@ -1,6 +1,6 @@
 const SSHConfig = require('ssh-config')
 const linuxUser = require('linux-sys-user');
-const chown = require('chown');
+const chownr = require('chownr');
 
 class sshdCheck {
 
@@ -63,7 +63,7 @@ class sshdCheck {
         return SSHConfig.stringify(config);
     }
 
-    public static async createGroupIfNeeded(): Promise<void> {
+    public static async createGroupIfNeeded(): Promise<any> {
         return new Promise(function (resolve, reject) {
             linuxUser.getGroupInfo('purecore', function (err, data) {
                 if (err || data == null) {
@@ -74,11 +74,11 @@ class sshdCheck {
                             reject();
                         } else {
                             Supervisor.emitter.emit('createdGroup');
-                            resolve();
+                            resolve(data);
                         }
                     })
                 } else {
-                    resolve();
+                    resolve(data);
                 }
             })
         });
@@ -88,7 +88,7 @@ class sshdCheck {
     public static async createUser(hostAuth): Promise<void> {
         console.log("creating user");
         return new Promise(function (resolve, reject) {
-            sshdCheck.createGroupIfNeeded().then(() => {
+            sshdCheck.createGroupIfNeeded().then((g) => {
                 console.log("group present");
                 Supervisor.emitter.emit('creatingUser');
                 const userPath = Correlativity.hostedPath + hostAuth.host.uuid;
@@ -102,7 +102,8 @@ class sshdCheck {
                         Supervisor.emitter.emit('errorCreatingUser');
                         reject();
                     }
-                    chown(dataPath, hostAuth.host.uuid, 'purecore')
+                    console.log(g);
+                    chownr(dataPath, user.uid, g.gid)
                         .then(() => {
                             console.log("chowned");
                             Supervisor.emitter.emit('createdUser');

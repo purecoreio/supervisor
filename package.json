@@ -4,7 +4,6 @@
   "description": "",
   "main": "index.js",
   "dependencies": {
-    "chown": "^0.1.2",
     "colors": "^1.4.0",
     "dockerode": "^3.2.1",
     "express": "^4.17.1",

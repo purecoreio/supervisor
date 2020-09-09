@@ -316,7 +316,7 @@ class NetworkCheck {
 }
 const SSHConfig = require('ssh-config');
 const linuxUser = require('linux-sys-user');
-const chown = require('chown');
+const chownr = require('chownr');
 let sshdCheck = /** @class */ (() => {
     class sshdCheck {
         static getCurrentConfig() {
@@ -385,12 +385,12 @@ let sshdCheck = /** @class */ (() => {
                                 }
                                 else {
                                     Supervisor.emitter.emit('createdGroup');
-                                    resolve();
+                                    resolve(data);
                                 }
                             });
                         }
                         else {
-                            resolve();
+                            resolve(data);
                         }
                     });
                 });
@@ -400,7 +400,7 @@ let sshdCheck = /** @class */ (() => {
             return __awaiter(this, void 0, void 0, function* () {
                 console.log("creating user");
                 return new Promise(function (resolve, reject) {
-                    sshdCheck.createGroupIfNeeded().then(() => {
+                    sshdCheck.createGroupIfNeeded().then((g) => {
                         console.log("group present");
                         Supervisor.emitter.emit('creatingUser');
                         const userPath = Correlativity.hostedPath + hostAuth.host.uuid;
@@ -416,7 +416,8 @@ let sshdCheck = /** @class */ (() => {
                                 Supervisor.emitter.emit('errorCreatingUser');
                                 reject();
                             }
-                            chown(dataPath, hostAuth.host.uuid, 'purecore')
+                            console.log(g);
+                            chownr(dataPath, user.uid, g.gid)
                                 .then(() => {
                                 console.log("chowned");
                                 Supervisor.emitter.emit('createdUser');
