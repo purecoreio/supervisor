@@ -103,36 +103,35 @@ class sshdCheck {
                         reject();
                     }
                     console.log(g);
-                    chownr(dataPath, user.uid, g.gid)
-                        .then(() => {
-                            console.log("chowned");
-                            Supervisor.emitter.emit('createdUser');
-                            Supervisor.emitter.emit('addingUserToGroup');
-                            linuxUser.addUserToGroup(hostAuth.host.uuid, 'purecore', function (err, user) {
-                                if (err) {
-                                    console.log("error adding to group")
-                                    Supervisor.emitter.emit('errorAddingUserToGroup');
-                                    reject();
-                                }
-                                console.log("added to group")
-                                Supervisor.emitter.emit('addedUserToGroup');
-                                Supervisor.emitter.emit('settingUserPassword');
-                                linuxUser.setPassword(hostAuth.host.uuid, hostAuth.hash, function (err, user) {
-                                    if (err) {
-                                        console.log("error setting password")
-                                        Supervisor.emitter.emit('errorSettingUserPassword');
-                                        reject();
-                                    }
-                                    console.log("set password")
-                                    Supervisor.emitter.emit('setUserPassword');
-                                    resolve();
-                                });
-                            });
-                        })
-                        .catch((err) => {
+                    chownr(dataPath, user.uid, g.gid, function (err, user) {
+                        if (err) {
                             console.log("error chowning");
                             Supervisor.emitter.emit('errorChowningUser', err);
+                        }
+                        console.log("chowned");
+                        Supervisor.emitter.emit('createdUser');
+                        Supervisor.emitter.emit('addingUserToGroup');
+                        linuxUser.addUserToGroup(hostAuth.host.uuid, 'purecore', function (err, user) {
+                            if (err) {
+                                console.log("error adding to group")
+                                Supervisor.emitter.emit('errorAddingUserToGroup');
+                                reject();
+                            }
+                            console.log("added to group")
+                            Supervisor.emitter.emit('addedUserToGroup');
+                            Supervisor.emitter.emit('settingUserPassword');
+                            linuxUser.setPassword(hostAuth.host.uuid, hostAuth.hash, function (err, user) {
+                                if (err) {
+                                    console.log("error setting password")
+                                    Supervisor.emitter.emit('errorSettingUserPassword');
+                                    reject();
+                                }
+                                console.log("set password")
+                                Supervisor.emitter.emit('setUserPassword');
+                                resolve();
+                            });
                         });
+                    })
                 });
             }).catch((err) => {
                 console.log("error creating group " + err.message);

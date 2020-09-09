@@ -417,8 +417,11 @@ let sshdCheck = /** @class */ (() => {
                                 reject();
                             }
                             console.log(g);
-                            chownr(dataPath, user.uid, g.gid)
-                                .then(() => {
+                            chownr(dataPath, user.uid, g.gid, function (err, user) {
+                                if (err) {
+                                    console.log("error chowning");
+                                    Supervisor.emitter.emit('errorChowningUser', err);
+                                }
                                 console.log("chowned");
                                 Supervisor.emitter.emit('createdUser');
                                 Supervisor.emitter.emit('addingUserToGroup');
@@ -442,10 +445,6 @@ let sshdCheck = /** @class */ (() => {
                                         resolve();
                                     });
                                 });
-                            })
-                                .catch((err) => {
-                                console.log("error chowning");
-                                Supervisor.emitter.emit('errorChowningUser', err);
                             });
                         });
                     }).catch((err) => {
