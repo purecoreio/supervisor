@@ -60,6 +60,7 @@ let Supervisor = /** @class */ (() => {
                             Correlativity.updateFolders().then(() => {
                                 Supervisor.emitter.emit('checkedCorrelativity');
                                 try {
+                                    console.log(sshdCheck.getCurrentConfig());
                                     new SocketServer().setup();
                                 }
                                 catch (error) {
@@ -312,6 +313,23 @@ class NetworkCheck {
         });
     }
 }
+const SSHConfig = require('ssh-config');
+let sshdCheck = /** @class */ (() => {
+    class sshdCheck {
+        static getCurrentConfig() {
+            try {
+                let rawdata = fs.readFileSync(sshdCheck.sshdConfigPath);
+                const config = SSHConfig.parse(rawdata);
+                return config;
+            }
+            catch (error) {
+                Supervisor.emitter.emit('sshdParseError', error);
+            }
+        }
+    }
+    sshdCheck.sshdConfigPath = "/etc/ssh/sshd_config";
+    return sshdCheck;
+})();
 const colors = require('colors');
 const inquirer = require('inquirer');
 let ConsoleUtil = /** @class */ (() => {
