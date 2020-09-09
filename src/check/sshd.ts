@@ -86,42 +86,52 @@ class sshdCheck {
 
 
     public static async createUser(hostAuth): Promise<void> {
+        console.log("creating user");
         return new Promise(function (resolve, reject) {
             sshdCheck.createGroupIfNeeded().then(() => {
+                console.log("group present");
                 Supervisor.emitter.emit('creatingUser');
                 const userPath = Correlativity.hostedPath + hostAuth.host.uuid;
                 fs.mkdirSync(userPath)
                 linuxUser.addUser({ username: hostAuth.host.uuid, create_home: true, home_dir: userPath, shell: null }, function (err, user) {
                     if (err) {
+                        console.log("error creating user " + err.message);
                         Supervisor.emitter.emit('errorCreatingUser');
                         reject();
                     }
                     chown(userPath, hostAuth.host.uuid, 'purecore')
                         .then(() => {
+                            console.log("chowned");
                             Supervisor.emitter.emit('createdUser');
                             Supervisor.emitter.emit('addingUserToGroup');
                             linuxUser.addUserToGroup(hostAuth.host.uuid, 'purecore', function (err, user) {
                                 if (err) {
+                                    console.log("error adding to group")
                                     Supervisor.emitter.emit('errorAddingUserToGroup');
                                     reject();
                                 }
+                                console.log("added to group")
                                 Supervisor.emitter.emit('addedUserToGroup');
                                 Supervisor.emitter.emit('settingUserPassword');
                                 linuxUser.setPassword(hostAuth.host.uuid, hostAuth.hash, function (err, user) {
                                     if (err) {
+                                        console.log("error setting password")
                                         Supervisor.emitter.emit('errorSettingUserPassword');
                                         reject();
                                     }
+                                    console.log("set password")
                                     Supervisor.emitter.emit('setUserPassword');
                                     resolve();
                                 });
                             });
                         })
                         .catch((err) => {
+                            console.log("error chowning");
                             Supervisor.emitter.emit('errorChowningUser', err);
                         });
                 });
             }).catch((err) => {
+                console.log("error creating group " + err.message);
                 reject();
             })
         });
