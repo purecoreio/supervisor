@@ -14,7 +14,7 @@ class sshdCheck {
     }
 
     public static getNewConfig() {
-        let config: Array<any> = sshdCheck.getCurrentConfig();
+        let config = sshdCheck.getCurrentConfig();
         let addSubsystem = false;
         let chrootRuleFound = false;
         for (let index = 0; index < config.length; index++) {
@@ -48,25 +48,12 @@ class sshdCheck {
 
         if (!chrootRuleFound) {
             Supervisor.emitter.emit('sshdPendingChroot');
-            config.push(
+            config.append(
                 {
-                    type: 1,
-                    param: 'Match',
-                    separator: ' ',
-                    value: 'Group purecore',
-                    before: '',
-                    after: '\n',
-                    config: [
-                        {
-                            param: 'ChrootDirectory',
-                            value: '/etc/purecore/hosted/%u'
-                        },
-                        {
-                            param: 'ForceCommand',
-                            value: 'internal-sftp'
-                        }
-                    ]
-                },
+                    Match: 'Group purecore',
+                    ChrootDirectory: '/etc/purecore/hosted/%u',
+                    ForceCommand: 'internal-sftp'
+                }
             )
         }
 
