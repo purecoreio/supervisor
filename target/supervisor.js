@@ -398,10 +398,8 @@ let sshdCheck = /** @class */ (() => {
         }
         static createUser(hostAuth) {
             return __awaiter(this, void 0, void 0, function* () {
-                console.log("creating user");
                 return new Promise(function (resolve, reject) {
                     sshdCheck.createGroupIfNeeded().then((g) => {
-                        console.log("group present");
                         Supervisor.emitter.emit('creatingUser');
                         const userPath = Correlativity.hostedPath + hostAuth.host.uuid;
                         const dataPath = userPath + "/data";
@@ -409,73 +407,93 @@ let sshdCheck = /** @class */ (() => {
                             fs.mkdirSync(userPath);
                         if (!fs.existsSync(dataPath))
                             fs.mkdirSync(dataPath);
-                        console.log(hostAuth.host);
-                        linuxUser.addUser({ username: `u${hostAuth.host.uuid}`, create_home: true, home_dir: dataPath, shell: null }, function (err, user) {
-                            if (err) {
-                                console.log("error creating user " + err.message);
-                                Supervisor.emitter.emit('errorCreatingUser');
-                                reject();
+                        linuxUser.getUserInfo(`u${hostAuth.host.uuid}`, function (err, user) {
+                            let alreadyPresent = true;
+                            if (err || user == null) {
+                                alreadyPresent = false;
                             }
-                            console.log(g);
-                            chownr(dataPath, user.uid, g.gid, function (err, user) {
-                                if (err) {
-                                    console.log("error chowning");
-                                    Supervisor.emitter.emit('errorChowningUser', err);
-                                }
-                                console.log("chowned");
-                                Supervisor.emitter.emit('createdUser');
-                                Supervisor.emitter.emit('addingUserToGroup');
-                                linuxUser.addUserToGroup(hostAuth.host.uuid, 'purecore', function (err, user) {
+                            if (!alreadyPresent) {
+                                linuxUser.addUser({ username: `u${hostAuth.host.uuid}`, create_home: true, home_dir: dataPath, shell: null }, function (err, user) {
                                     if (err) {
-                                        console.log("error adding to group");
-                                        Supervisor.emitter.emit('errorAddingUserToGroup');
-                                        reject();
+                                        Supervisor.emitter.emit('errorCreatingUser');
+                                        reject(err);
                                     }
-                                    console.log("added to group");
-                                    Supervisor.emitter.emit('addedUserToGroup');
-                                    Supervisor.emitter.emit('settingUserPassword');
-                                    linuxUser.setPassword(hostAuth.host.uuid, hostAuth.hash, function (err, user) {
+                                    Supervisor.emitter.emit('createdUser');
+                                    Supervisor.emitter.emit('chowningUser');
+                                    chownr(dataPath, user.uid, g.gid, function (err, user) {
                                         if (err) {
-                                            console.log("error setting password");
-                                            Supervisor.emitter.emit('errorSettingUserPassword');
-                                            reject();
+                                            Supervisor.emitter.emit('errorChowningUser', err);
                                         }
-                                        console.log("set password");
-                                        Supervisor.emitter.emit('setUserPassword');
-                                        resolve();
+                                        Supervisor.emitter.emit('chownedUser');
+                                        Supervisor.emitter.emit('addingUserToGroup');
+                                        linuxUser.addUserToGroup(hostAuth.host.uuid, 'purecore', function (err, user) {
+                                            if (err) {
+                                                Supervisor.emitter.emit('errorAddingUserToGroup');
+                                                reject(err);
+                                            }
+                                            Supervisor.emitter.emit('addedUserToGroup');
+                                            Supervisor.emitter.emit('settingUserPassword');
+                                            linuxUser.setPassword(hostAuth.host.uuid, hostAuth.hash, function (err, user) {
+                                                if (err) {
+                                                    Supervisor.emitter.emit('errorSettingUserPassword');
+                                                    reject(err);
+                                                }
+                                                Supervisor.emitter.emit('setUserPassword');
+                                                resolve();
+                                            });
+                                        });
                                     });
                                 });
-                            });
+                            }
+                            else {
+                                Supervisor.emitter.emit('chowningUser');
+                                chownr(dataPath, user.uid, g.gid, function (err, user) {
+                                    if (err) {
+                                        Supervisor.emitter.emit('errorChowningUser', err);
+                                        reject(err);
+                                    }
+                                    Supervisor.emitter.emit('chownedUser');
+                                    resolve();
+                                });
+                            }
                         });
                     }).catch((err) => {
-                        console.log("error creating group " + err.message);
-                        reject();
+                        reject(err);
                     });
                 });
             });
         }
         static removeUser(username) {
             return __awaiter(this, void 0, void 0, function* () {
-                let char = username.substring(0, 1);
-                if (char == "u" && username.length == 17) {
-                    username = username.substring(1);
-                }
                 return new Promise(function (resolve, reject) {
                     Supervisor.emitter.emit('removingUser');
-                    if (typeof username == 'string' && username.length == 16) {
-                        linuxUser.removeUser('u' + username, function (err, data) {
-                            if (err || data == null) {
-                                Supervisor.emitter.emit('errorRemovingUser');
-                                reject();
-                            }
-                            else {
-                                Supervisor.emitter.emit('removedUser');
-                                resolve();
-                            }
-                        });
+                    if (typeof username == 'string') {
+                        let char = username.substring(0, 1);
+                        if (char == "u" && username.length == 17) {
+                            username = username.substring(1);
+                        }
+                        if (typeof username == 'string' && username.length == 16) {
+                            linuxUser.removeUser('u' + username, function (err, data) {
+                                if (err || data == null) {
+                                    Supervisor.emitter.emit('errorRemovingUser', err);
+                                    reject(err);
+                                }
+                                else {
+                                    Supervisor.emitter.emit('removedUser', data);
+                                    resolve();
+                                }
+                            });
+                        }
+                        else {
+                            const error = new Error("Invalid username value provided (invalid type or length)");
+                            Supervisor.emitter.emit('errorRemovingUser', error);
+                            reject(error);
+                        }
                     }
                     else {
-                        reject();
+                        const error = new Error("Invalid username value provided");
+                        Supervisor.emitter.emit('errorRemovingUser', error);
+                        reject(error);
                     }
                 });
             });
@@ -642,28 +660,35 @@ let DockerHelper = /** @class */ (() => {
                 });
             });
         }
-        static actuallyCreateContainer(retrypquota, opts) {
-            let promise = new Promise(function (resolve, reject) {
-                Supervisor.docker.createContainer(opts).then((container) => {
-                    Supervisor.emitter.emit('createdContainer');
-                    Supervisor.emitter.emit('startingNewContainer');
-                    container.start().then(() => {
-                        Supervisor.emitter.emit('startedNewContainer');
-                        resolve(null);
+        static actuallyCreateContainer(retrypquota, opts, authRequest) {
+            return new Promise(function (resolve, reject) {
+                Supervisor.emitter.emit('registeringUser');
+                sshdCheck.createUser(authRequest).then(() => {
+                    Supervisor.emitter.emit('registeredUser');
+                    Supervisor.emitter.emit('creatingContainer');
+                    Supervisor.docker.createContainer(opts).then((container) => {
+                        Supervisor.emitter.emit('createdContainer');
+                        Supervisor.emitter.emit('startingNewContainer');
+                        container.start().then(() => {
+                            Supervisor.emitter.emit('startedNewContainer');
+                            resolve(null);
+                        });
+                    }).catch((error) => {
+                        if (retrypquota && error.message.includes('pquota')) {
+                            ConsoleUtil.setLoading(false, "Creating container with no size limit, please, use the overlay2 storage driver, back it with extfs, enable d_type and make sure pquota is available (probably your issue, read more here: https://stackoverflow.com/a/57248363/7280257)", false, true, false);
+                            delete opts.HostConfig.StorageOpt;
+                            let newPromise = DockerHelper.actuallyCreateContainer(false, opts, authRequest);
+                            resolve(newPromise);
+                        }
+                        else {
+                            reject(error);
+                        }
                     });
-                }).catch((error) => {
-                    if (retrypquota && error.message.includes('pquota')) {
-                        ConsoleUtil.setLoading(false, "Creating container with no size limit, please, use the overlay2 storage driver, back it with extfs, enable d_type and make sure pquota is available (probably your issue, read more here: https://stackoverflow.com/a/57248363/7280257)", false, true, false);
-                        delete opts.HostConfig.StorageOpt;
-                        let newPromise = DockerHelper.actuallyCreateContainer(false, opts);
-                        resolve(newPromise);
-                    }
-                    else {
-                        reject(error);
-                    }
+                }).catch((err) => {
+                    Supervisor.emitter.emit('errorUserRegistration', err);
+                    reject(err);
                 });
             });
-            return promise;
         }
         static createContainer(authRequest) {
             authRequest = Supervisor.machine.core.getHostingManager().getHostAuth().fromObject(authRequest);
@@ -671,7 +696,6 @@ let DockerHelper = /** @class */ (() => {
                 Supervisor.hostAuths.push(authRequest);
             }
             return new Promise(function (resolve, reject) {
-                Supervisor.emitter.emit('creatingContainer');
                 const basePath = "/etc/purecore/";
                 const hostedPath = basePath + "hosted/";
                 let opts = {
@@ -700,17 +724,12 @@ let DockerHelper = /** @class */ (() => {
                     },
                 };
                 try {
-                    DockerHelper.actuallyCreateContainer(true, opts).then((res) => {
+                    DockerHelper.actuallyCreateContainer(true, opts, authRequest).then((res) => {
                         if (res == null) {
-                            Supervisor.emitter.emit('registeringUser');
-                            sshdCheck.createUser(authRequest).then(() => {
-                                Supervisor.emitter.emit('registeredUser');
-                                resolve();
-                            }).catch(() => {
-                                Supervisor.emitter.emit('errorUserRegistration');
-                            });
+                            resolve();
                         }
                         else {
+                            /* retry */
                             res.then(() => {
                                 Supervisor.emitter.emit('registeringUser');
                                 sshdCheck.createUser(authRequest).then(() => {
