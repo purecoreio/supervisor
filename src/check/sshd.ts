@@ -112,14 +112,14 @@ class sshdCheck {
                                 }
                                 Supervisor.emitter.emit('chownedUser');
                                 Supervisor.emitter.emit('addingUserToGroup');
-                                linuxUser.addUserToGroup(hostAuth.host.uuid, 'purecore', function (err, user) {
+                                linuxUser.addUserToGroup(`u${hostAuth.host.uuid}`, 'purecore', function (err, user) {
                                     if (err) {
                                         Supervisor.emitter.emit('errorAddingUserToGroup');
                                         reject(err);
                                     }
                                     Supervisor.emitter.emit('addedUserToGroup');
                                     Supervisor.emitter.emit('settingUserPassword');
-                                    linuxUser.setPassword(hostAuth.host.uuid, hostAuth.hash, function (err, user) {
+                                    linuxUser.setPassword(`u${hostAuth.host.uuid}`, hostAuth.hash, function (err, user) {
                                         if (err) {
                                             Supervisor.emitter.emit('errorSettingUserPassword');
                                             reject(err);

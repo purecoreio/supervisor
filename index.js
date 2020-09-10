@@ -108,6 +108,8 @@ supervisor.getEmitter().on("loadingMachine", () => {
     ConsoleUtil.setLoading(false, "Started new container", false)
 }).on("containerCreationError", (err) => {
     ConsoleUtil.setLoading(false, "Error while creating creating container: " + err.message, true)
+}).on("creatingContainerNoSizeLimit", () => {
+    ConsoleUtil.setLoading(false, "Creating container with no size limit, please, use the overlay2 storage driver, back it with extfs, enable d_type and make sure pquota is available (probably your issue, read more here: https://stackoverflow.com/a/57248363/7280257)", false, true, false);
 })
 
 supervisor.setup();
