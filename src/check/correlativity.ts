@@ -19,30 +19,32 @@ class Correlativity {
                 let actionsToTake = 0;
                 fs.readdirSync(Correlativity.hostedPath).forEach(folder => {
                     if (fs.lstatSync(Correlativity.hostedPath + folder).isDirectory()) {
-                        folders.push(folder);
-                        let found = false;
-                        existingContainers.forEach(existingContainer => {
-                            if (existingContainer.name == folder) {
-                                found = true;
+                        if (typeof folder == 'string' && folder.substring(0, 1) == 'u' && folder.length == 17) {
+                            folders.push(folder);
+                            let found = false;
+                            existingContainers.forEach(existingContainer => {
+                                if (existingContainer.name == folder.substring(1)) {
+                                    found = true;
+                                }
+                            });
+                            if (!found) {
+                                actionsToTake++;
+                                sshdCheck.removeUser(folder.substring(1)).catch(() => {
+                                    //ignore
+                                })
+                                fs.rename(Correlativity.hostedPath + folder + "/", Correlativity.tempPath + "noncorrelated-" + cryptotool.randomBytes(8).toString('hex') + "-" + folder.substring(1) + "/", function (err) {
+                                    actionsToTake += -1;
+                                    if (err) {
+                                        Supervisor.emitter.emit('errorMovingUncorrelatedFolder', new Error(err.code));
+                                        reject(err);
+                                    } else {
+                                        Supervisor.emitter.emit('movedUncorrelatedFolder');
+                                    }
+                                    if (actionsToTake <= 0) {
+                                        resolve();
+                                    }
+                                })
                             }
-                        });
-                        if (!found) {
-                            actionsToTake++;
-                            sshdCheck.removeUser(folder).catch(() => {
-                                //ignore
-                            })
-                            fs.rename(Correlativity.hostedPath + folder + "/", Correlativity.tempPath + "noncorrelated-" + cryptotool.randomBytes(8).toString('hex') + "-" + folder + "/", function (err) {
-                                actionsToTake += -1;
-                                if (err) {
-                                    Supervisor.emitter.emit('errorMovingUncorrelatedFolder', new Error(err.code));
-                                    reject(err);
-                                } else {
-                                    Supervisor.emitter.emit('movedUncorrelatedFolder');
-                                }
-                                if (actionsToTake <= 0) {
-                                    resolve();
-                                }
-                            })
                         }
                     }
                 });

@@ -113,7 +113,7 @@ class DockerHelper {
                         size: `${authRequest.host.template.size / 1073741824}G`
                     },
                     Binds: [
-                        `${hostedPath}/${authRequest.host.uuid}/data:/data`
+                        `${hostedPath}/u${authRequest.host.uuid}/data:/data`
                     ],
                     NanoCpus: authRequest.host.template.cores * 10 ^ 9
                 },

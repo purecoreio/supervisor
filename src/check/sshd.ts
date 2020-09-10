@@ -89,7 +89,7 @@ class sshdCheck {
         return new Promise(function (resolve, reject) {
             sshdCheck.createGroupIfNeeded().then((g) => {
                 Supervisor.emitter.emit('creatingUser');
-                const userPath = Correlativity.hostedPath + hostAuth.host.uuid;
+                const userPath = Correlativity.hostedPath + "u" + hostAuth.host.uuid;
                 const dataPath = userPath + "/data";
                 if (!fs.existsSync(userPath)) fs.mkdirSync(userPath)
                 if (!fs.existsSync(dataPath)) fs.mkdirSync(dataPath)

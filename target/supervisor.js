@@ -129,31 +129,33 @@ let Correlativity = /** @class */ (() => {
                     let actionsToTake = 0;
                     fs.readdirSync(Correlativity.hostedPath).forEach(folder => {
                         if (fs.lstatSync(Correlativity.hostedPath + folder).isDirectory()) {
-                            folders.push(folder);
-                            let found = false;
-                            existingContainers.forEach(existingContainer => {
-                                if (existingContainer.name == folder) {
-                                    found = true;
+                            if (typeof folder == 'string' && folder.substring(0, 1) == 'u' && folder.length == 17) {
+                                folders.push(folder);
+                                let found = false;
+                                existingContainers.forEach(existingContainer => {
+                                    if (existingContainer.name == folder.substring(1)) {
+                                        found = true;
+                                    }
+                                });
+                                if (!found) {
+                                    actionsToTake++;
+                                    sshdCheck.removeUser(folder.substring(1)).catch(() => {
+                                        //ignore
+                                    });
+                                    fs.rename(Correlativity.hostedPath + folder + "/", Correlativity.tempPath + "noncorrelated-" + cryptotool.randomBytes(8).toString('hex') + "-" + folder.substring(1) + "/", function (err) {
+                                        actionsToTake += -1;
+                                        if (err) {
+                                            Supervisor.emitter.emit('errorMovingUncorrelatedFolder', new Error(err.code));
+                                            reject(err);
+                                        }
+                                        else {
+                                            Supervisor.emitter.emit('movedUncorrelatedFolder');
+                                        }
+                                        if (actionsToTake <= 0) {
+                                            resolve();
+                                        }
+                                    });
                                 }
-                            });
-                            if (!found) {
-                                actionsToTake++;
-                                sshdCheck.removeUser(folder).catch(() => {
-                                    //ignore
-                                });
-                                fs.rename(Correlativity.hostedPath + folder + "/", Correlativity.tempPath + "noncorrelated-" + cryptotool.randomBytes(8).toString('hex') + "-" + folder + "/", function (err) {
-                                    actionsToTake += -1;
-                                    if (err) {
-                                        Supervisor.emitter.emit('errorMovingUncorrelatedFolder', new Error(err.code));
-                                        reject(err);
-                                    }
-                                    else {
-                                        Supervisor.emitter.emit('movedUncorrelatedFolder');
-                                    }
-                                    if (actionsToTake <= 0) {
-                                        resolve();
-                                    }
-                                });
                             }
                         }
                     });
@@ -401,7 +403,7 @@ let sshdCheck = /** @class */ (() => {
                 return new Promise(function (resolve, reject) {
                     sshdCheck.createGroupIfNeeded().then((g) => {
                         Supervisor.emitter.emit('creatingUser');
-                        const userPath = Correlativity.hostedPath + hostAuth.host.uuid;
+                        const userPath = Correlativity.hostedPath + "u" + hostAuth.host.uuid;
                         const dataPath = userPath + "/data";
                         if (!fs.existsSync(userPath))
                             fs.mkdirSync(userPath);
@@ -725,7 +727,7 @@ let DockerHelper = /** @class */ (() => {
                             size: `${authRequest.host.template.size / 1073741824}G`
                         },
                         Binds: [
-                            `${hostedPath}/${authRequest.host.uuid}/data:/data`
+                            `${hostedPath}/u${authRequest.host.uuid}/data:/data`
                         ],
                         NanoCpus: authRequest.host.template.cores * 10 ^ 9
                     },
