@@ -86,79 +86,95 @@ class sshdCheck {
 
 
     public static async createUser(hostAuth): Promise<void> {
-        console.log("creating user");
         return new Promise(function (resolve, reject) {
             sshdCheck.createGroupIfNeeded().then((g) => {
-                console.log("group present");
                 Supervisor.emitter.emit('creatingUser');
                 const userPath = Correlativity.hostedPath + hostAuth.host.uuid;
                 const dataPath = userPath + "/data";
                 if (!fs.existsSync(userPath)) fs.mkdirSync(userPath)
                 if (!fs.existsSync(dataPath)) fs.mkdirSync(dataPath)
-                console.log(hostAuth.host)
-                linuxUser.addUser({ username: `u${hostAuth.host.uuid}`, create_home: true, home_dir: dataPath, shell: null }, function (err, user) {
-                    if (err) {
-                        console.log("error creating user " + err.message);
-                        Supervisor.emitter.emit('errorCreatingUser');
-                        reject();
+                linuxUser.getUserInfo(`u${hostAuth.host.uuid}`, function (err, user) {
+                    let alreadyPresent = true;
+                    if (err || user == null) {
+                        alreadyPresent = false;
                     }
-                    console.log(g);
-                    chownr(dataPath, user.uid, g.gid, function (err, user) {
-                        if (err) {
-                            console.log("error chowning");
-                            Supervisor.emitter.emit('errorChowningUser', err);
-                        }
-                        console.log("chowned");
-                        Supervisor.emitter.emit('createdUser');
-                        Supervisor.emitter.emit('addingUserToGroup');
-                        linuxUser.addUserToGroup(hostAuth.host.uuid, 'purecore', function (err, user) {
+                    if (!alreadyPresent) {
+                        linuxUser.addUser({ username: `u${hostAuth.host.uuid}`, create_home: true, home_dir: dataPath, shell: null }, function (err, user) {
                             if (err) {
-                                console.log("error adding to group")
-                                Supervisor.emitter.emit('errorAddingUserToGroup');
-                                reject();
+                                Supervisor.emitter.emit('errorCreatingUser');
+                                reject(err);
                             }
-                            console.log("added to group")
-                            Supervisor.emitter.emit('addedUserToGroup');
-                            Supervisor.emitter.emit('settingUserPassword');
-                            linuxUser.setPassword(hostAuth.host.uuid, hostAuth.hash, function (err, user) {
+                            Supervisor.emitter.emit('createdUser');
+                            Supervisor.emitter.emit('chowningUser');
+                            chownr(dataPath, user.uid, g.gid, function (err, user) {
                                 if (err) {
-                                    console.log("error setting password")
-                                    Supervisor.emitter.emit('errorSettingUserPassword');
-                                    reject();
+                                    Supervisor.emitter.emit('errorChowningUser', err);
                                 }
-                                console.log("set password")
-                                Supervisor.emitter.emit('setUserPassword');
-                                resolve();
-                            });
+                                Supervisor.emitter.emit('chownedUser');
+                                Supervisor.emitter.emit('addingUserToGroup');
+                                linuxUser.addUserToGroup(hostAuth.host.uuid, 'purecore', function (err, user) {
+                                    if (err) {
+                                        Supervisor.emitter.emit('errorAddingUserToGroup');
+                                        reject(err);
+                                    }
+                                    Supervisor.emitter.emit('addedUserToGroup');
+                                    Supervisor.emitter.emit('settingUserPassword');
+                                    linuxUser.setPassword(hostAuth.host.uuid, hostAuth.hash, function (err, user) {
+                                        if (err) {
+                                            Supervisor.emitter.emit('errorSettingUserPassword');
+                                            reject(err);
+                                        }
+                                        Supervisor.emitter.emit('setUserPassword');
+                                        resolve();
+                                    });
+                                });
+                            })
                         });
-                    })
-                });
+                    } else {
+                        Supervisor.emitter.emit('chowningUser');
+                        chownr(dataPath, user.uid, g.gid, function (err, user) {
+                            if (err) {
+                                Supervisor.emitter.emit('errorChowningUser', err);
+                                reject(err);
+                            }
+                            Supervisor.emitter.emit('chownedUser');
+                            resolve();
+                        })
+                    }
+                })
             }).catch((err) => {
-                console.log("error creating group " + err.message);
-                reject();
+                reject(err);
             })
         });
     }
 
     public static async removeUser(username): Promise<void> {
-        let char = username.substring(0, 1);
-        if (char == "u" && username.length == 17) {
-            username = username.substring(1);
-        }
         return new Promise(function (resolve, reject) {
             Supervisor.emitter.emit('removingUser');
-            if (typeof username == 'string' && username.length == 16) {
-                linuxUser.removeUser('u'+username, function (err, data) {
-                    if (err || data == null) {
-                        Supervisor.emitter.emit('errorRemovingUser');
-                        reject();
-                    } else {
-                        Supervisor.emitter.emit('removedUser');
-                        resolve();
-                    }
-                });
+            if (typeof username == 'string') {
+                let char = username.substring(0, 1);
+                if (char == "u" && username.length == 17) {
+                    username = username.substring(1);
+                }
+                if (typeof username == 'string' && username.length == 16) {
+                    linuxUser.removeUser('u' + username, function (err, data) {
+                        if (err || data == null) {
+                            Supervisor.emitter.emit('errorRemovingUser', err);
+                            reject(err);
+                        } else {
+                            Supervisor.emitter.emit('removedUser', data);
+                            resolve();
+                        }
+                    });
+                } else {
+                    const error = new Error("Invalid username value provided (invalid type or length)");
+                    Supervisor.emitter.emit('errorRemovingUser', error);
+                    reject(error);
+                }
             } else {
-                reject();
+                const error = new Error("Invalid username value provided")
+                Supervisor.emitter.emit('errorRemovingUser', error);
+                reject(error);
             }
         })
     }
