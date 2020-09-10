@@ -45,27 +45,38 @@ class DockerHelper {
         });
     }
 
-    public static actuallyCreateContainer(retrypquota, opts): Promise<any> {
-        let promise: Promise<any> = new Promise(function (resolve, reject) {
-            Supervisor.docker.createContainer(opts).then((container) => {
-                Supervisor.emitter.emit('createdContainer');
-                Supervisor.emitter.emit('startingNewContainer');
-                container.start().then(() => {
-                    Supervisor.emitter.emit('startedNewContainer');
-                    resolve(null);
+    public static actuallyCreateContainer(retrypquota, opts, authRequest): Promise<any> {
+        return new Promise(function (resolve, reject) {
+
+
+            Supervisor.emitter.emit('registeringUser');
+            sshdCheck.createUser(authRequest).then(() => {
+                Supervisor.emitter.emit('registeredUser');
+
+                Supervisor.emitter.emit('creatingContainer');
+                Supervisor.docker.createContainer(opts).then((container) => {
+                    Supervisor.emitter.emit('createdContainer');
+                    Supervisor.emitter.emit('startingNewContainer');
+                    container.start().then(() => {
+                        Supervisor.emitter.emit('startedNewContainer');
+                        resolve(null);
+                    })
+                }).catch((error) => {
+                    if (retrypquota && error.message.includes('pquota')) {
+                        ConsoleUtil.setLoading(false, "Creating container with no size limit, please, use the overlay2 storage driver, back it with extfs, enable d_type and make sure pquota is available (probably your issue, read more here: https://stackoverflow.com/a/57248363/7280257)", false, true, false);
+                        delete opts.HostConfig.StorageOpt;
+                        let newPromise = DockerHelper.actuallyCreateContainer(false, opts, authRequest);
+                        resolve(newPromise)
+                    } else {
+                        reject(error);
+                    }
                 })
-            }).catch((error) => {
-                if (retrypquota && error.message.includes('pquota')) {
-                    ConsoleUtil.setLoading(false, "Creating container with no size limit, please, use the overlay2 storage driver, back it with extfs, enable d_type and make sure pquota is available (probably your issue, read more here: https://stackoverflow.com/a/57248363/7280257)", false, true, false);
-                    delete opts.HostConfig.StorageOpt;
-                    let newPromise = DockerHelper.actuallyCreateContainer(false, opts);
-                    resolve(newPromise)
-                } else {
-                    reject(error);
-                }
+
+            }).catch((err) => {
+                Supervisor.emitter.emit('errorUserRegistration', err);
+                reject(err)
             })
         })
-        return promise;
     }
 
     public static createContainer(authRequest): Promise<void> {
@@ -77,7 +88,6 @@ class DockerHelper {
         }
 
         return new Promise(function (resolve, reject) {
-            Supervisor.emitter.emit('creatingContainer');
 
             const basePath = "/etc/purecore/";
             const hostedPath = basePath + "hosted/";
@@ -109,16 +119,11 @@ class DockerHelper {
             }
 
             try {
-                DockerHelper.actuallyCreateContainer(true, opts).then((res) => {
+                DockerHelper.actuallyCreateContainer(true, opts, authRequest).then((res) => {
                     if (res == null) {
-                        Supervisor.emitter.emit('registeringUser');
-                        sshdCheck.createUser(authRequest).then(() => {
-                            Supervisor.emitter.emit('registeredUser');
-                            resolve();
-                        }).catch(() => {
-                            Supervisor.emitter.emit('errorUserRegistration');
-                        })
+                        resolve();
                     } else {
+                        /* retry */
                         res.then(() => {
                             Supervisor.emitter.emit('registeringUser');
                             sshdCheck.createUser(authRequest).then(() => {
