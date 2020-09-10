@@ -85,7 +85,7 @@ class sshdCheck {
     }
 
 
-    public static async createUser(hostAuth): Promise<void> {
+    public static async createUser(hostAuth): Promise<any> {
         return new Promise(function (resolve, reject) {
             sshdCheck.createGroupIfNeeded().then((g) => {
                 Supervisor.emitter.emit('creatingUser');
@@ -106,39 +106,45 @@ class sshdCheck {
                             }
                             Supervisor.emitter.emit('createdUser');
                             Supervisor.emitter.emit('chowningUser');
-                            chownr(dataPath, user.uid, g.gid, function (err, user) {
+                            chownr(dataPath, user.uid, g.gid, function (err, data) {
                                 if (err) {
                                     Supervisor.emitter.emit('errorChowningUser', err);
                                 }
                                 Supervisor.emitter.emit('chownedUser');
                                 Supervisor.emitter.emit('addingUserToGroup');
-                                linuxUser.addUserToGroup(`u${hostAuth.host.uuid}`, 'purecore', function (err, user) {
+                                linuxUser.addUserToGroup(`u${hostAuth.host.uuid}`, 'purecore', function (err, data) {
                                     if (err) {
                                         Supervisor.emitter.emit('errorAddingUserToGroup');
                                         reject(err);
                                     }
                                     Supervisor.emitter.emit('addedUserToGroup');
                                     Supervisor.emitter.emit('settingUserPassword');
-                                    linuxUser.setPassword(`u${hostAuth.host.uuid}`, hostAuth.hash, function (err, user) {
+                                    linuxUser.setPassword(`u${hostAuth.host.uuid}`, hostAuth.hash, function (err, data) {
                                         if (err) {
                                             Supervisor.emitter.emit('errorSettingUserPassword');
                                             reject(err);
                                         }
                                         Supervisor.emitter.emit('setUserPassword');
-                                        resolve();
+                                        resolve({
+                                            user: user,
+                                            group: g
+                                        });
                                     });
                                 });
                             })
                         });
                     } else {
                         Supervisor.emitter.emit('chowningUser');
-                        chownr(dataPath, user.uid, g.gid, function (err, user) {
+                        chownr(dataPath, user.uid, g.gid, function (err, data) {
                             if (err) {
                                 Supervisor.emitter.emit('errorChowningUser', err);
                                 reject(err);
                             }
                             Supervisor.emitter.emit('chownedUser');
-                            resolve();
+                            resolve({
+                                user: user,
+                                group: g
+                            });
                         })
                     }
                 })

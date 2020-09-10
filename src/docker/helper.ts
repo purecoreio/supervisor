@@ -50,7 +50,8 @@ class DockerHelper {
 
 
             Supervisor.emitter.emit('registeringUser');
-            sshdCheck.createUser(authRequest).then(() => {
+            sshdCheck.createUser(authRequest).then((perm) => {
+                opts.User = `${perm.user.uid}:${perm.group.gid}`;
                 Supervisor.emitter.emit('registeredUser');
 
                 Supervisor.emitter.emit('creatingContainer');

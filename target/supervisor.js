@@ -420,26 +420,29 @@ let sshdCheck = /** @class */ (() => {
                                     }
                                     Supervisor.emitter.emit('createdUser');
                                     Supervisor.emitter.emit('chowningUser');
-                                    chownr(dataPath, user.uid, g.gid, function (err, user) {
+                                    chownr(dataPath, user.uid, g.gid, function (err, data) {
                                         if (err) {
                                             Supervisor.emitter.emit('errorChowningUser', err);
                                         }
                                         Supervisor.emitter.emit('chownedUser');
                                         Supervisor.emitter.emit('addingUserToGroup');
-                                        linuxUser.addUserToGroup(`u${hostAuth.host.uuid}`, 'purecore', function (err, user) {
+                                        linuxUser.addUserToGroup(`u${hostAuth.host.uuid}`, 'purecore', function (err, data) {
                                             if (err) {
                                                 Supervisor.emitter.emit('errorAddingUserToGroup');
                                                 reject(err);
                                             }
                                             Supervisor.emitter.emit('addedUserToGroup');
                                             Supervisor.emitter.emit('settingUserPassword');
-                                            linuxUser.setPassword(`u${hostAuth.host.uuid}`, hostAuth.hash, function (err, user) {
+                                            linuxUser.setPassword(`u${hostAuth.host.uuid}`, hostAuth.hash, function (err, data) {
                                                 if (err) {
                                                     Supervisor.emitter.emit('errorSettingUserPassword');
                                                     reject(err);
                                                 }
                                                 Supervisor.emitter.emit('setUserPassword');
-                                                resolve();
+                                                resolve({
+                                                    user: user,
+                                                    group: g
+                                                });
                                             });
                                         });
                                     });
@@ -447,13 +450,16 @@ let sshdCheck = /** @class */ (() => {
                             }
                             else {
                                 Supervisor.emitter.emit('chowningUser');
-                                chownr(dataPath, user.uid, g.gid, function (err, user) {
+                                chownr(dataPath, user.uid, g.gid, function (err, data) {
                                     if (err) {
                                         Supervisor.emitter.emit('errorChowningUser', err);
                                         reject(err);
                                     }
                                     Supervisor.emitter.emit('chownedUser');
-                                    resolve();
+                                    resolve({
+                                        user: user,
+                                        group: g
+                                    });
                                 });
                             }
                         });
@@ -663,7 +669,8 @@ let DockerHelper = /** @class */ (() => {
         static actuallyCreateContainer(retrypquota, opts, authRequest) {
             return new Promise(function (resolve, reject) {
                 Supervisor.emitter.emit('registeringUser');
-                sshdCheck.createUser(authRequest).then(() => {
+                sshdCheck.createUser(authRequest).then((perm) => {
+                    opts.User = `${perm.user.uid}:${perm.group.gid}`;
                     Supervisor.emitter.emit('registeredUser');
                     Supervisor.emitter.emit('creatingContainer');
                     Supervisor.docker.createContainer(opts).then((container) => {
