@@ -19,7 +19,6 @@ class SocketServer {
             client.on('health', extra => {
                 if (SocketServer.getHost(client) != null && SocketServer.isAuthenticated(client)) {
                     try {
-                        console.log('getting emitter for the client' + client.id)
                         SocketServer.healthEmitters[client.id] = DockerLogger.getHealthEmitter(SocketServer.getHost(client).host.uuid)
                         console.log(SocketServer.healthEmitters);
                         if (SocketServer.healthEmitters[client.id] != null) {
@@ -98,12 +97,15 @@ class SocketServer {
         if (SocketServer.authenticated.includes(client.id)) {
             return true;
         } else {
-            console.log("checking for client "+client.id);
+            let match = null;
             for (let index = 0; index < SocketServer.authenticatedHosts.length; index++) {
                 const element = SocketServer.authenticatedHosts[index];
                 console.log(element.client);
-                if (element.client == client.id) return true; console.log("match"); break;
+                if (element.client == client.id) match = element; break;
             }
+            console.log(match)
+            console.log("with " + client.id);
+            return match != null;
         }
     }
 
@@ -117,7 +119,6 @@ class SocketServer {
             if (!SocketServer.authenticatedHosts.includes({ client: client.id, hostAuth: host })) {
                 Supervisor.emitter.emit('clientConnected');
                 SocketServer.authenticatedHosts.push({ client: client.id, hostAuth: host });
-                console.log(SocketServer.authenticatedHosts);
             }
         }
         client.emit('authenticated')
