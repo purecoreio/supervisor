@@ -113,7 +113,7 @@ supervisor.getEmitter().on("loadingMachine", () => {
 }).on("startingHealthLogger", () => {
     ConsoleUtil.setLoading(true, "Starting health logger", false);
 }).on("startedHealthLogger", () => {
-    ConsoleUtil.setLoading(true, "Started health logger", false);
+    ConsoleUtil.setLoading(false, "Started health logger", false);
 }).on("errorStartingHealthLogger", () => {
     ConsoleUtil.setLoading(false, "Error starting health logger", true);
 })

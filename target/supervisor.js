@@ -632,6 +632,7 @@ class HealthLog {
         this.emitter = new EventEmitter();
     }
     pushLog(log) {
+        log = JSON.parse(log);
         this.emitter.emit('log', log);
         this.logs.push({
             time: Date.now(),
