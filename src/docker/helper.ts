@@ -60,6 +60,9 @@ class DockerHelper {
                     Supervisor.emitter.emit('startingNewContainer');
                     container.start().then(() => {
                         Supervisor.emitter.emit('startedNewContainer');
+                        DockerLogger.startLogging(authRequest.host.uuid).catch((err) => {
+                            console.log(err);
+                        })
                         resolve(null);
                     })
                 }).catch((error) => {
