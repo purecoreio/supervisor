@@ -25,9 +25,10 @@ class DockerHelper {
     }
 
     public static removeRestriction(ip) {
-        iptables.list(function (data) {
+        iptables.list(function (err, data) {
+            if (err) return console.error(err);
             console.log(data);
-        })
+        });
     }
 
     public static restrictToIP(host, ip, protocol = 'tcp', port?) {

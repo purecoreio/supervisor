@@ -668,7 +668,9 @@ let DockerHelper = /** @class */ (() => {
             });
         }
         static removeRestriction(ip) {
-            iptables.list(function (data) {
+            iptables.list(function (err, data) {
+                if (err)
+                    return console.error(err);
                 console.log(data);
             });
         }
