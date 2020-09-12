@@ -17,14 +17,10 @@ class SocketServer {
             client.on('health', extra => {
                 if (SocketServer.getHost(client) != null && SocketServer.isAuthenticated(client)) {
                     try {
-                        let emitter = [DockerLogger.getHealthEmitter(SocketServer.getHost(client).host.uuid)]
+                        let emitter = DockerLogger.getHealthEmitter(SocketServer.getHost(client).host.uuid)
                         if (emitter != null) {
-                            emitter[0].on('log', (log) => {
-                                if (client.connected) {
-                                    client.emit('healthLog', log);
-                                } else {
-                                    delete emitter[0];
-                                }
+                            emitter.on('log', (log) => {
+                                if (client.connected) client.emit('healthLog', log);
                             })
                         }
                     } catch (error) {
