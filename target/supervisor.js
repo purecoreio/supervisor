@@ -941,13 +941,11 @@ let SocketServer = /** @class */ (() => {
                     if (SocketServer.getHost(client) != null && SocketServer.isAuthenticated(client)) {
                         try {
                             SocketServer.healthEmitters[client.id] = DockerLogger.getHealthEmitter(SocketServer.getHost(client).host.uuid);
+                            console.log(SocketServer.healthEmitters);
                             if (SocketServer.healthEmitters[client.id] != null) {
                                 SocketServer.healthEmitters[client.id].on('log', (log) => {
                                     if (client.connected) {
                                         client.emit('healthLog', log);
-                                    }
-                                    else {
-                                        delete SocketServer.healthEmitters[client.id];
                                     }
                                 });
                             }
