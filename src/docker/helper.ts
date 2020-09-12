@@ -24,11 +24,19 @@ class DockerHelper {
         });
     }
 
-    public static removeRestriction(ip) {
-        iptables.list(function (err, data) {
-            if (err) return console.error(err);
-            console.log(data);
-        });
+    public static removeRestriction(ip): Promise<void> {
+        return new Promise(function (resolve, reject) {
+            iptables.list('ACCEPT', function (err, data) {
+                if (err) reject(err);
+                let rules = data;
+                iptables.list('DROP', function (err, data) {
+                    if (err) reject(err);
+                    rules.concat(data);
+                    console.log(rules);
+                    resolve();
+                });
+            });
+        })
     }
 
     public static restrictToIP(host, ip, protocol = 'tcp', port?) {
