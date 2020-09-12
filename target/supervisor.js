@@ -959,8 +959,18 @@ let SocketServer = /** @class */ (() => {
                         }
                     }
                     else {
-                        console.log(SocketServer.isAuthenticated(client));
-                        console.log(SocketServer.getHost(client));
+                        if (SocketServer.isAuthenticated(client)) {
+                            console.log("authenticated");
+                        }
+                        else {
+                            console.log("not authenticated");
+                        }
+                        if (SocketServer.getHost(client) == null) {
+                            console.log("unknown host");
+                        }
+                        else {
+                            console.log("known host");
+                        }
                     }
                 });
                 client.on('console', extra => {
