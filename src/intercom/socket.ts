@@ -9,6 +9,8 @@ class SocketServer {
     public static authenticated = [];
     public static authenticatedHosts = [];
 
+    public static healthEmitters: any = {};
+
     public getSocket(server) {
         return new socketio(server).on('connection', client => {
             client.on('authenticate', authInfo => {
@@ -17,10 +19,14 @@ class SocketServer {
             client.on('health', extra => {
                 if (SocketServer.getHost(client) != null && SocketServer.isAuthenticated(client)) {
                     try {
-                        let emitter = DockerLogger.getHealthEmitter(SocketServer.getHost(client).host.uuid)
-                        if (emitter != null) {
-                            emitter.on('log', (log) => {
-                                if (client.connected) client.emit('healthLog', log);
+                        SocketServer.healthEmitters[client.id] = DockerLogger.getHealthEmitter(SocketServer.getHost(client).host.uuid)
+                        if (SocketServer.healthEmitters[client.id] != null) {
+                            SocketServer.healthEmitters[client.id].on('log', (log) => {
+                                if (client.connected) {
+                                    client.emit('healthLog', log);
+                                } else {
+                                    delete SocketServer.healthEmitters[client.id];
+                                }
                             })
                         }
                     } catch (error) {

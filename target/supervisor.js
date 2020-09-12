@@ -940,11 +940,15 @@ let SocketServer = /** @class */ (() => {
                 client.on('health', extra => {
                     if (SocketServer.getHost(client) != null && SocketServer.isAuthenticated(client)) {
                         try {
-                            let emitter = DockerLogger.getHealthEmitter(SocketServer.getHost(client).host.uuid);
-                            if (emitter != null) {
-                                emitter.on('log', (log) => {
-                                    if (client.connected)
+                            SocketServer.healthEmitters[client.id] = DockerLogger.getHealthEmitter(SocketServer.getHost(client).host.uuid);
+                            if (SocketServer.healthEmitters[client.id] != null) {
+                                SocketServer.healthEmitters[client.id].on('log', (log) => {
+                                    if (client.connected) {
                                         client.emit('healthLog', log);
+                                    }
+                                    else {
+                                        delete SocketServer.healthEmitters[client.id];
+                                    }
                                 });
                             }
                         }
@@ -1159,6 +1163,7 @@ let SocketServer = /** @class */ (() => {
     }
     SocketServer.authenticated = [];
     SocketServer.authenticatedHosts = [];
+    SocketServer.healthEmitters = {};
     return SocketServer;
 })();
 let MachineSettings = /** @class */ (() => {
