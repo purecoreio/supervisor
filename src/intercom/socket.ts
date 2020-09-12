@@ -20,7 +20,6 @@ class SocketServer {
                 if (SocketServer.getHost(client) != null && SocketServer.isAuthenticated(client)) {
                     try {
                         SocketServer.healthEmitters[client.id] = DockerLogger.getHealthEmitter(SocketServer.getHost(client).host.uuid)
-                        console.log(SocketServer.healthEmitters);
                         if (SocketServer.healthEmitters[client.id] != null) {
                             SocketServer.healthEmitters[client.id].on('log', (log) => {
                                 if (client.connected) {
@@ -71,14 +70,14 @@ class SocketServer {
                             }
                         })
                     } catch (error) {
-                        console.log(error)
+                        // ignore
                     }
                 }
             })
             client.on('host', hostObject => {
                 if (SocketServer.isMasterAuthenticated(client)) DockerHelper.createContainer(hostObject).catch((err) => { /*ignore*/ })
             });
-            client.on('disconnect', () => { SocketServer.removeAuth(client.id) });
+            client.on('disconnect', () => { SocketServer.removeAuth(client) });
         })
     }
 
@@ -103,8 +102,6 @@ class SocketServer {
                     match = authenticatedHost;
                 }
             });
-            console.log(match)
-            console.log("with " + client.id);
             return match != null;
         }
     }
@@ -124,12 +121,12 @@ class SocketServer {
         client.emit('authenticated')
     }
 
-    public static removeAuth(clientid) {
-        if (this.isAuthenticated(clientid)) {
+    public static removeAuth(client) {
+        if (this.isAuthenticated(client)) {
             Supervisor.emitter.emit('clientDisconnected');
-            SocketServer.authenticated = SocketServer.authenticated.filter(x => x !== clientid);
-            SocketServer.authenticatedHosts = SocketServer.authenticatedHosts.filter(x => x.client !== clientid);
         }
+        SocketServer.authenticated = SocketServer.authenticated.filter(x => x !== client.id);
+        SocketServer.authenticatedHosts = SocketServer.authenticatedHosts.filter(x => x.client !== client.id);
     }
 
     public authenticate(client, authInfo) {
