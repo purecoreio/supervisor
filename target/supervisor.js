@@ -866,7 +866,7 @@ let DockerLogger = /** @class */ (() => {
                     }
                     else {
                         existingContainers.forEach(containerInfo => {
-                            DockerLogger.startLogging(containerInfo.container);
+                            DockerLogger.startLogging(containerInfo.host);
                             todo += -1;
                             if (todo <= 0) {
                                 Supervisor.emitter.emit('startedHealthLogger');
@@ -899,7 +899,7 @@ let DockerLogger = /** @class */ (() => {
                         }
                     });
                     if (container == null) {
-                        reject(new Error("no attached container"));
+                        reject(new Error("no attached container for " + hostid));
                     }
                     else {
                         Supervisor.docker.getContainer(container).then((actualContainer) => {
