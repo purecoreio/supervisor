@@ -632,13 +632,12 @@ class HealthLog {
         this.emitter = new EventEmitter();
     }
     pushLog(log) {
-        log = JSON.parse(log);
+        log = JSON.parse(log.toString('utf8'));
         this.emitter.emit('log', log);
         this.logs.push({
             time: Date.now(),
             log: log,
         });
-        console.log(log);
         if (this.logs[0].time < Date.now() - 3600 * 24 * 1000) {
             // delete logs older than 24h
             delete this.logs[0];
@@ -807,7 +806,7 @@ let DockerLogger = /** @class */ (() => {
                 }
             }
             catch (error) {
-                // ignore
+                return null;
             }
         }
         static addLog(hostid, log) {
@@ -937,6 +936,24 @@ let SocketServer = /** @class */ (() => {
             return new socketio(server).on('connection', client => {
                 client.on('authenticate', authInfo => {
                     this.authenticate(client, authInfo);
+                });
+                client.on('health', extra => {
+                    if (SocketServer.getHost(client) != null && SocketServer.isAuthenticated(client)) {
+                        try {
+                            let emitter = DockerLogger.getHealthEmitter(SocketServer.getHost(client).host.uuid);
+                            console.log("got emitter");
+                            if (emitter != null) {
+                                console.log("valid emitter");
+                                emitter.on('log', (log) => {
+                                    console.log("resending log");
+                                    client.emit('healthLog', log);
+                                });
+                            }
+                        }
+                        catch (error) {
+                            console.log(error);
+                        }
+                    }
                 });
                 client.on('console', extra => {
                     if (SocketServer.getHost(client) != null && SocketServer.isAuthenticated(client)) {

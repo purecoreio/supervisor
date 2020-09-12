@@ -14,6 +14,23 @@ class SocketServer {
             client.on('authenticate', authInfo => {
                 this.authenticate(client, authInfo);
             });
+            client.on('health', extra => {
+                if (SocketServer.getHost(client) != null && SocketServer.isAuthenticated(client)) {
+                    try {
+                        let emitter = DockerLogger.getHealthEmitter(SocketServer.getHost(client).host.uuid)
+                        console.log("got emitter")
+                        if (emitter != null) {
+                            console.log("valid emitter")
+                            emitter.on('log', (log) => {
+                                console.log("resending log");
+                                client.emit('healthLog', log);
+                            })
+                        }
+                    } catch (error) {
+                        console.log(error)
+                    }
+                }
+            });
             client.on('console', extra => {
                 if (SocketServer.getHost(client) != null && SocketServer.isAuthenticated(client)) {
                     try {

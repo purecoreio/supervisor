@@ -17,7 +17,7 @@ class DockerLogger {
                 return DockerLogger.health[healthIndex].emitter;
             }
         } catch (error) {
-            // ignore
+            return null;
         }
     }
 

@@ -17,7 +17,6 @@ class HealthLog {
             time: Date.now(),
             log: log,
         })
-        console.log(log);
         if (this.logs[0].time < Date.now() - 3600 * 24 * 1000) {
             // delete logs older than 24h
             delete this.logs[0];
