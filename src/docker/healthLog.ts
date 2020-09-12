@@ -1,26 +1,23 @@
 class HealthLog {
 
     public host: string;
-    public logs: Array<any>;
+    public lastLog: any;
     public emitter: any;
 
-    public constructor(host: string, logs: Array<any>) {
+    public constructor(host: string, log: any) {
         this.host = host;
-        this.logs = logs;
+        this.lastLog = log;
         this.emitter = new EventEmitter();
     }
 
     public pushLog(log) {
         log = JSON.parse(log.toString('utf8'));
         this.emitter.emit('log', log);
-        this.logs.push({
+        this.lastLog = {
             time: Date.now(),
             log: log,
-        })
-        if (this.logs[0].time < Date.now() - 3600 * 24 * 1000) {
-            // delete logs older than 24h
-            delete this.logs[0];
         }
+        this.lastLog = log;
     }
 
 }

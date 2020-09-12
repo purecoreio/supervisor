@@ -1,4 +1,5 @@
 const { PassThrough } = require('stream')
+const iptables = require('iptables');
 
 class DockerHelper {
 
@@ -20,6 +21,28 @@ class DockerHelper {
                     }
                 }
             });
+        });
+    }
+
+    public static removeRestriction(ip) {
+        iptables.list(function (data) {
+            console.log(data);
+        })
+    }
+
+    public static restrictToIP(host, ip, protocol = 'tcp', port?) {
+        if (port == null) port = host.port;
+        iptables.allow({
+            protocol: protocol,
+            src: ip,
+            dport: port,
+            sudo: true
+        });
+
+        iptables.drop({
+            protocol: protocol,
+            dport: port,
+            sudo: true
         });
     }
 

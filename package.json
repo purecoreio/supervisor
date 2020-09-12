@@ -8,6 +8,7 @@
     "dockerode": "^3.2.1",
     "express": "^4.17.1",
     "inquirer": "^7.3.3",
+    "iptables": "0.0.4",
     "linux-sys-user": "^1.1.3",
     "lodash": "^4.17.20",
     "npm-platform-dependencies": "^0.1.0",

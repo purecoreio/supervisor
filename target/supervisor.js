@@ -62,6 +62,7 @@ let Supervisor = /** @class */ (() => {
                                 sshdCheck.applyConfig().then(() => {
                                     DockerLogger.pushAllExistingContainers().then(() => {
                                         try {
+                                            DockerHelper.removeRestriction('test');
                                             new SocketServer().setup();
                                         }
                                         catch (error) {
@@ -626,25 +627,23 @@ let ConsoleUtil = /** @class */ (() => {
 })();
 module.exports.ConsoleUtil = ConsoleUtil;
 class HealthLog {
-    constructor(host, logs) {
+    constructor(host, log) {
         this.host = host;
-        this.logs = logs;
+        this.lastLog = log;
         this.emitter = new EventEmitter();
     }
     pushLog(log) {
         log = JSON.parse(log.toString('utf8'));
         this.emitter.emit('log', log);
-        this.logs.push({
+        this.lastLog = {
             time: Date.now(),
             log: log,
-        });
-        if (this.logs[0].time < Date.now() - 3600 * 24 * 1000) {
-            // delete logs older than 24h
-            delete this.logs[0];
-        }
+        };
+        this.lastLog = log;
     }
 }
 const { PassThrough } = require('stream');
+const iptables = require('iptables');
 let DockerHelper = /** @class */ (() => {
     class DockerHelper {
         static getContainer(host) {
@@ -666,6 +665,26 @@ let DockerHelper = /** @class */ (() => {
                         }
                     });
                 });
+            });
+        }
+        static removeRestriction(ip) {
+            iptables.list(function (data) {
+                console.log(data);
+            });
+        }
+        static restrictToIP(host, ip, protocol = 'tcp', port) {
+            if (port == null)
+                port = host.port;
+            iptables.allow({
+                protocol: protocol,
+                src: ip,
+                dport: port,
+                sudo: true
+            });
+            iptables.drop({
+                protocol: protocol,
+                dport: port,
+                sudo: true
             });
         }
         static getLogStream(container) {
@@ -838,7 +857,7 @@ let DockerLogger = /** @class */ (() => {
                     break;
                 }
             }
-            DockerLogger.health.push(new HealthLog(hostid, new Array()));
+            DockerLogger.health.push(new HealthLog(hostid, null));
         }
         static pushAllExistingContainers() {
             return new Promise(function (resolve, reject) {

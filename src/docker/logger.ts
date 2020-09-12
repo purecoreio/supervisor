@@ -49,7 +49,7 @@ class DockerLogger {
                 break;
             }
         }
-        DockerLogger.health.push(new HealthLog(hostid, new Array<any>()));
+        DockerLogger.health.push(new HealthLog(hostid, null));
     }
 
     public static pushAllExistingContainers(): Promise<void> {
