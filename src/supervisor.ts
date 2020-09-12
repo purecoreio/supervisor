@@ -64,14 +64,18 @@ class Supervisor {
                     Supervisor.emitter.emit('gotHosts');
                     Supervisor.hostAuths = hosts;
                     Supervisor.emitter.emit('checkingCorrelativity');
-                    Correlativity.updateFolders().then(() => {
+                    Correlativity.updateContainers().then(() => {
                         Supervisor.emitter.emit('checkedCorrelativity');
                         sshdCheck.applyConfig().then(() => {
-                            try {
-                                new SocketServer().setup();
-                            } catch (error) {
-                                Supervisor.emitter.emit('errorSettingUpSockets');
-                            }
+                            DockerLogger.pushAllExistingContainers().then(() => {
+                                try {
+                                    new SocketServer().setup();
+                                } catch (error) {
+                                    Supervisor.emitter.emit('errorSettingUpSockets');
+                                }
+                            }).catch((err)=>{
+                                // ignore
+                            })
                         })
                     }).catch((err) => {
                         Supervisor.emitter.emit('errorCheckingCorrelativity', err);
@@ -79,7 +83,7 @@ class Supervisor {
                 }).catch(() => {
                     Supervisor.emitter.emit('errorGettingHosts');
                 })
-            }).catch((err) => {
+            }).catch(() => {
                 // can't complete the setup process
             })
         }).catch((err) => {
