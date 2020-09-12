@@ -668,10 +668,19 @@ let DockerHelper = /** @class */ (() => {
             });
         }
         static removeRestriction(ip) {
-            iptables.list(function cb(err, data) {
-                if (err)
-                    return console.error(err);
-                console.log(data);
+            return new Promise(function (resolve, reject) {
+                iptables.list('ACCEPT', function (err, data) {
+                    if (err)
+                        reject(err);
+                    let rules = data;
+                    iptables.list('DROP', function (err, data) {
+                        if (err)
+                            reject(err);
+                        rules.concat(data);
+                        console.log(rules);
+                        resolve();
+                    });
+                });
             });
         }
         static restrictToIP(host, ip, protocol = 'tcp', port) {
