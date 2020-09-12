@@ -111,16 +111,14 @@ class DockerLogger {
                 if (container == null) {
                     reject(new Error("no attached container for " + hostid));
                 } else {
-                    Supervisor.docker.getContainer(container).then((actualContainer) => {
-                        actualContainer.stats({ stream: true }).then((statStream) => {
-                            DockerLogger.setHealthLog(hostid);
-                            statStream.on('data', (stat) => {
-                                DockerLogger.addLog(hostid, stat);
-                            });
-                        })
-                    }).catch((err) => {
-                        reject(new Error("error while getting the actual container: " + err.message))
+                    let actualContainer = Supervisor.docker.getContainer(container);
+                    actualContainer.stats({ stream: true }).then((statStream) => {
+                        DockerLogger.setHealthLog(hostid);
+                        statStream.on('data', (stat) => {
+                            DockerLogger.addLog(hostid, stat);
+                        });
                     })
+
                 }
             }).catch((err) => {
                 reject(new Error("error listing existing containers: " + err.message))
