@@ -27,7 +27,7 @@ class SocketServer {
                                 if (client.connected) {
                                     client.emit('healthLog', log);
                                 } else {
-                                    console.log("not connected")
+                                    delete SocketServer.healthEmitters[client.id];
                                 }
                             })
                         }
@@ -35,12 +35,12 @@ class SocketServer {
                         console.log(error)
                     }
                 } else {
-                    if(SocketServer.isAuthenticated(client)){
+                    if (SocketServer.isAuthenticated(client)) {
                         console.log("authenticated")
                     } else {
                         console.log("not authenticated")
                     }
-                    if(SocketServer.getHost(client)==null){
+                    if (SocketServer.getHost(client) == null) {
                         console.log("unknown host")
                     } else {
                         console.log("known host");
@@ -112,9 +112,10 @@ class SocketServer {
                 this.authenticated.push(client.id);
             }
         } else {
-            if (!SocketServer.authenticatedHosts.includes(client.id)) {
+            if (!SocketServer.authenticatedHosts.includes({ client: client.id, hostAuth: host })) {
                 Supervisor.emitter.emit('clientConnected');
                 SocketServer.authenticatedHosts.push({ client: client.id, hostAuth: host });
+                console.log(SocketServer.authenticatedHosts);
             }
         }
         client.emit('authenticated')

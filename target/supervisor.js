@@ -949,7 +949,7 @@ let SocketServer = /** @class */ (() => {
                                         client.emit('healthLog', log);
                                     }
                                     else {
-                                        console.log("not connected");
+                                        delete SocketServer.healthEmitters[client.id];
                                     }
                                 });
                             }
@@ -1045,9 +1045,10 @@ let SocketServer = /** @class */ (() => {
                 }
             }
             else {
-                if (!SocketServer.authenticatedHosts.includes(client.id)) {
+                if (!SocketServer.authenticatedHosts.includes({ client: client.id, hostAuth: host })) {
                     Supervisor.emitter.emit('clientConnected');
                     SocketServer.authenticatedHosts.push({ client: client.id, hostAuth: host });
+                    console.log(SocketServer.authenticatedHosts);
                 }
             }
             client.emit('authenticated');
