@@ -57,15 +57,19 @@ let Supervisor = /** @class */ (() => {
                             Supervisor.emitter.emit('gotHosts');
                             Supervisor.hostAuths = hosts;
                             Supervisor.emitter.emit('checkingCorrelativity');
-                            Correlativity.updateFolders().then(() => {
+                            Correlativity.updateContainers().then(() => {
                                 Supervisor.emitter.emit('checkedCorrelativity');
                                 sshdCheck.applyConfig().then(() => {
-                                    try {
-                                        new SocketServer().setup();
-                                    }
-                                    catch (error) {
-                                        Supervisor.emitter.emit('errorSettingUpSockets');
-                                    }
+                                    DockerLogger.pushAllExistingContainers().then(() => {
+                                        try {
+                                            new SocketServer().setup();
+                                        }
+                                        catch (error) {
+                                            Supervisor.emitter.emit('errorSettingUpSockets');
+                                        }
+                                    }).catch((err) => {
+                                        // ignore
+                                    });
                                 });
                             }).catch((err) => {
                                 Supervisor.emitter.emit('errorCheckingCorrelativity', err);
@@ -73,7 +77,7 @@ let Supervisor = /** @class */ (() => {
                         }).catch(() => {
                             Supervisor.emitter.emit('errorGettingHosts');
                         });
-                    }).catch((err) => {
+                    }).catch(() => {
                         // can't complete the setup process
                     });
                 }).catch((err) => {
@@ -168,7 +172,7 @@ let Correlativity = /** @class */ (() => {
                 }
             });
         }
-        static updateFolders() {
+        static updateContainers() {
             return new Promise(function (resolve, reject) {
                 try {
                     Supervisor.docker.listContainers({ all: true }, function (err, containers) {
@@ -621,6 +625,25 @@ let ConsoleUtil = /** @class */ (() => {
     return ConsoleUtil;
 })();
 module.exports.ConsoleUtil = ConsoleUtil;
+class HealthLog {
+    constructor(host, logs) {
+        this.host = host;
+        this.logs = logs;
+        this.emitter = new EventEmitter();
+    }
+    pushLog(log) {
+        this.emitter.emit('log', log);
+        this.logs.push({
+            time: Date.now(),
+            log: log,
+        });
+        console.log(log);
+        if (this.logs[0].time < Date.now() - 3600 * 24 * 1000) {
+            // delete logs older than 24h
+            delete this.logs[0];
+        }
+    }
+}
 const { PassThrough } = require('stream');
 let DockerHelper = /** @class */ (() => {
     class DockerHelper {
@@ -680,6 +703,9 @@ let DockerHelper = /** @class */ (() => {
                         Supervisor.emitter.emit('startingNewContainer');
                         container.start().then(() => {
                             Supervisor.emitter.emit('startedNewContainer');
+                            DockerLogger.startLogging(authRequest.host.uuid).catch((err) => {
+                                console.log(err);
+                            });
                             resolve(null);
                         });
                     }).catch((error) => {
@@ -761,23 +787,141 @@ let DockerHelper = /** @class */ (() => {
     DockerHelper.hostingFolder = "/etc/purecore/hosted/";
     return DockerHelper;
 })();
-class LiteEvent {
-    constructor() {
-        this.handlers = [];
+let DockerLogger = /** @class */ (() => {
+    class DockerLogger {
+        static getHealthEmitter(hostid) {
+            try {
+                let healthIndex = null;
+                for (let index = 0; index < DockerLogger.health.length; index++) {
+                    const element = DockerLogger.health[index];
+                    if (element.host == hostid) {
+                        healthIndex = index;
+                    }
+                }
+                if (healthIndex == null) {
+                    throw new Error("No matching hosts");
+                }
+                else {
+                    return DockerLogger.health[healthIndex].emitter;
+                }
+            }
+            catch (error) {
+                // ignore
+            }
+        }
+        static addLog(hostid, log) {
+            try {
+                let healthIndex = null;
+                for (let index = 0; index < DockerLogger.health.length; index++) {
+                    const element = DockerLogger.health[index];
+                    if (element.host == hostid) {
+                        healthIndex = index;
+                    }
+                }
+                if (healthIndex == null) {
+                    throw new Error("No matching hosts");
+                }
+                else {
+                    DockerLogger.health[healthIndex].pushLog(log);
+                }
+            }
+            catch (error) {
+                // ignore
+            }
+        }
+        static setHealthLog(hostid) {
+            for (let index = 0; index < DockerLogger.health.length; index++) {
+                const element = DockerLogger.health[index];
+                if (element.host == hostid) {
+                    // delete existing host logs in order to prevent duplicates
+                    delete DockerLogger.health[index];
+                    break;
+                }
+            }
+            DockerLogger.health.push(new HealthLog(hostid, new Array()));
+        }
+        static pushAllExistingContainers() {
+            return new Promise(function (resolve, reject) {
+                Supervisor.emitter.emit('startingHealthLogger');
+                Supervisor.docker.listContainers({ all: true }).then((containers) => {
+                    let existingContainers = new Array();
+                    containers.forEach(function (containerInfo) {
+                        for (var name of containerInfo.Names) {
+                            name = String(name);
+                            const prefix = "core-";
+                            if (name.substr(0, 1) == '/')
+                                name = name.substr(1, name.length - 1);
+                            if (name.includes(prefix) && name.substr(0, prefix.length) == prefix) {
+                                existingContainers.push({
+                                    host: name.substr(prefix.length, name.length - prefix.length),
+                                    container: containerInfo.Id
+                                });
+                            }
+                        }
+                    });
+                    let todo = existingContainers.length;
+                    if (todo <= 0) {
+                        Supervisor.emitter.emit('startedHealthLogger');
+                        resolve();
+                    }
+                    else {
+                        existingContainers.forEach(containerInfo => {
+                            DockerLogger.startLogging(containerInfo.container);
+                            todo += -1;
+                            if (todo <= 0) {
+                                Supervisor.emitter.emit('startedHealthLogger');
+                                resolve();
+                            }
+                        });
+                    }
+                }).catch((err) => {
+                    Supervisor.emitter.emit('errorStartingHealthLogger');
+                    reject(new Error("error listing existing containers: " + err.message));
+                });
+            });
+        }
+        static startLogging(hostid) {
+            return new Promise(function (resolve, reject) {
+                Supervisor.docker.listContainers({ all: true }).then((containers) => {
+                    let container = null;
+                    containers.forEach(function (containerInfo) {
+                        for (var name of containerInfo.Names) {
+                            name = String(name);
+                            const prefix = "core-";
+                            if (name.substr(0, 1) == '/')
+                                name = name.substr(1, name.length - 1);
+                            if (name.includes(prefix) && name.substr(0, prefix.length) == prefix) {
+                                if (name.substr(prefix.length, name.length - prefix.length) == hostid) {
+                                    container = containerInfo.Id;
+                                    break;
+                                }
+                            }
+                        }
+                    });
+                    if (container == null) {
+                        reject(new Error("no attached container"));
+                    }
+                    else {
+                        Supervisor.docker.getContainer(container).then((actualContainer) => {
+                            actualContainer.stats({ stream: true }).then((statStream) => {
+                                DockerLogger.setHealthLog(hostid);
+                                statStream.on('data', (stat) => {
+                                    DockerLogger.addLog(hostid, stat);
+                                });
+                            });
+                        }).catch((err) => {
+                            reject(new Error("error while getting the actual container: " + err.message));
+                        });
+                    }
+                }).catch((err) => {
+                    reject(new Error("error listing existing containers: " + err.message));
+                });
+            });
+        }
     }
-    on(handler) {
-        this.handlers.push(handler);
-    }
-    off(handler) {
-        this.handlers = this.handlers.filter(h => h !== handler);
-    }
-    trigger(data) {
-        this.handlers.slice(0).forEach(h => h(data));
-    }
-    expose() {
-        return this;
-    }
-}
+    DockerLogger.health = new Array();
+    return DockerLogger;
+})();
 class Cert {
     constructor(key, cert, ca) {
         this.key = key;
