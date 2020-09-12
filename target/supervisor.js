@@ -1029,10 +1029,13 @@ let SocketServer = /** @class */ (() => {
                 return true;
             }
             else {
+                console.log("checking for client " + client.id);
                 for (let index = 0; index < SocketServer.authenticatedHosts.length; index++) {
                     const element = SocketServer.authenticatedHosts[index];
+                    console.log(element.client);
                     if (element.client == client.id)
                         return true;
+                    console.log("match");
                     break;
                 }
             }
