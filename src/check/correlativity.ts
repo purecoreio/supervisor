@@ -57,7 +57,7 @@ class Correlativity {
         })
     }
 
-    static updateFolders(): Promise<void> {
+    static updateContainers(): Promise<void> {
         return new Promise(function (resolve, reject) {
             try {
                 Supervisor.docker.listContainers({ all: true }, function (err, containers) {
