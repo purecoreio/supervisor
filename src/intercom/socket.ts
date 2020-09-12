@@ -19,6 +19,7 @@ class SocketServer {
             client.on('health', extra => {
                 if (SocketServer.getHost(client) != null && SocketServer.isAuthenticated(client)) {
                     try {
+                        console.log('getting emitter for the client' + client.id)
                         SocketServer.healthEmitters[client.id] = DockerLogger.getHealthEmitter(SocketServer.getHost(client).host.uuid)
                         console.log(SocketServer.healthEmitters);
                         if (SocketServer.healthEmitters[client.id] != null) {
