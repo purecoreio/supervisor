@@ -11,7 +11,7 @@ class HealthLog {
     }
 
     public pushLog(log) {
-        log = JSON.parse(log);
+        log = JSON.parse(log.toString('utf8'));
         this.emitter.emit('log', log);
         this.logs.push({
             time: Date.now(),
