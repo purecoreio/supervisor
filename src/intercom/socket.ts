@@ -98,11 +98,11 @@ class SocketServer {
             return true;
         } else {
             let match = null;
-            for (let index = 0; index < SocketServer.authenticatedHosts.length; index++) {
-                const element = SocketServer.authenticatedHosts[index];
-                console.log(element.client);
-                if (element.client == client.id) match = element; break;
-            }
+            SocketServer.authenticatedHosts.forEach(authenticatedHost => {
+                if (authenticatedHost.client == client.id) {
+                    match = authenticatedHost;
+                }
+            });
             console.log(match)
             console.log("with " + client.id);
             return match != null;
