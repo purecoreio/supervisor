@@ -26,12 +26,17 @@ class SocketServer {
                             SocketServer.healthEmitters[client.id].on('log', (log) => {
                                 if (client.connected) {
                                     client.emit('healthLog', log);
+                                } else {
+                                    console.log("not connected")
                                 }
                             })
                         }
                     } catch (error) {
                         console.log(error)
                     }
+                } else {
+                    console.log(SocketServer.isAuthenticated(client))
+                    console.log(SocketServer.getHost(client))
                 }
             });
             client.on('console', extra => {
