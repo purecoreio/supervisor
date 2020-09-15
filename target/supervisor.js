@@ -62,8 +62,7 @@ let Supervisor = /** @class */ (() => {
                                 sshdCheck.applyConfig().then(() => {
                                     DockerLogger.pushAllExistingContainers().then(() => {
                                         try {
-                                            DockerHelper.removeRestriction('test');
-                                            new SocketServer().setup();
+                                            new SocketClient().setup();
                                         }
                                         catch (error) {
                                             Supervisor.emitter.emit('errorSettingUpSockets');
@@ -956,10 +955,42 @@ class Cert {
         this.ca = ca;
     }
 }
+const io = require('socket.io-client');
+class SocketClient {
+    setup() {
+        SocketClient.socket = io.connect('https://socket.purecore.io/', { path: "/hosting" });
+        /**
+         * Authentication process:
+         * 1. connect
+         * 2. authenticate with hash
+         * 3. set as host machine when authenticated
+         */
+        SocketClient.socket.on('connect', function () {
+            Supervisor.emitter.emit('socketConnected');
+            Supervisor.emitter.emit('socketAuthenticating');
+            SocketClient.socket.emit('auth', Supervisor.hash);
+        });
+        SocketClient.socket.on('authenticated', function (data) {
+            Supervisor.emitter.emit('socketAuthenticated');
+            Supervisor.emitter.emit('socketHostRequest');
+            SocketClient.socket.emit('host');
+        });
+        SocketClient.socket.on('hosting', function (data) {
+            Supervisor.emitter.emit('socketHosting');
+        });
+        /**
+         *  Status Updates
+         */
+        SocketClient.socket.on('disconnect', function () { Supervisor.emitter.emit('socketDisconnected'); });
+    }
+}
 const http = require('http');
 const https = require('https');
 const socketio = require('socket.io');
 const app = require('express')();
+/**
+ * @deprecated
+ */
 let SocketServer = /** @class */ (() => {
     class SocketServer {
         getSocket(server) {

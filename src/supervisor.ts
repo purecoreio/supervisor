@@ -69,8 +69,7 @@ class Supervisor {
                         sshdCheck.applyConfig().then(() => {
                             DockerLogger.pushAllExistingContainers().then(() => {
                                 try {
-                                    DockerHelper.removeRestriction('test');
-                                    new SocketServer().setup();
+                                    new SocketClient().setup();
                                 } catch (error) {
                                     Supervisor.emitter.emit('errorSettingUpSockets');
                                 }

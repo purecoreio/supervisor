@@ -3,6 +3,9 @@ const https = require('https');
 const socketio = require('socket.io');
 const app = require('express')();
 
+/**
+ * @deprecated
+ */
 class SocketServer {
 
     public static io;
