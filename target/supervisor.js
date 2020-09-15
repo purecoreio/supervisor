@@ -979,6 +979,30 @@ class SocketClient {
             Supervisor.emitter.emit('socketHosting');
         });
         /**
+         * Admin Events
+         */
+        SocketClient.socket.on('createContainer', function (data) {
+            console.log(data);
+        });
+        /**
+         * User Events
+         */
+        SocketClient.socket.on('restartContainer', function (data) {
+            console.log(data);
+        });
+        SocketClient.socket.on('startContainer', function (data) {
+            console.log(data);
+        });
+        SocketClient.socket.on('stopContainer', function (data) {
+            console.log(data);
+        });
+        SocketClient.socket.on('pauseContainer', function (data) {
+            console.log(data);
+        });
+        SocketClient.socket.on('resumeContainer', function (data) {
+            console.log(data);
+        });
+        /**
          *  Status Updates
          */
         SocketClient.socket.on('disconnect', function () { Supervisor.emitter.emit('socketDisconnected'); });
