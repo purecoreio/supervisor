@@ -34,7 +34,7 @@ class SocketClient {
         });
 
         /**
-         * User Events
+         * Power https://docs.purecore.io/sockets/hosting/container-management/power
          */
         SocketClient.socket.on('restartContainer', function (data) {
             console.log("restartContainer " + data.host.uuid);
@@ -52,8 +52,19 @@ class SocketClient {
             console.log("resumeContainer " + data.host.uuid);
         });
 
+        /**
+         * State Requests
+         */
+        SocketClient.socket.on('updatePowerStatus', function (hostAuth) {
+            let status = {}; // todo
+            SocketClient.socket.emit('updatePowerStatus', {
+                host: hostAuth,
+                status: status
+            })
+        });
+
         /** 
-         *  Status Updates
+         * Status Updates
          */
         SocketClient.socket.on('disconnect', function () {
             Supervisor.emitter.emit('socketDisconnected')
