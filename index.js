@@ -98,6 +98,18 @@ supervisor.getEmitter().on("loadingMachine", () => {
     ConsoleUtil.setLoading(true, "Requesting control over the socket as a host", false);
 }).on("socketHosting", () => {
     ConsoleUtil.setLoading(false, "Acting as a host", false);
+}).on("socketDisconnected", () => {
+    ConsoleUtil.setLoading(false, "The socket has been disconnected", false, true);
+}).on("socketError", () => {
+    ConsoleUtil.setLoading(false, "Socket error", false, true);
+}).on("socketReconnected", () => {
+    ConsoleUtil.setLoading(false, "Reconnected to the socket server", false, false, true);
+}).on("socketReconnecting", () => {
+    ConsoleUtil.setLoading(true, "Reconnecting to the socket server", false);
+}).on("socketReconnectingError", () => {
+    ConsoleUtil.setLoading(false, "Error while reconnecting to the socket server", false, true);
+}).on("socketReconnectFailed", () => {
+    ConsoleUtil.setLoading(false, "Couldn't reconnect to the socket server", true);
 })
 
 supervisor.setup();

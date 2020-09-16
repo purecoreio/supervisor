@@ -982,30 +982,47 @@ class SocketClient {
          * Admin Events
          */
         SocketClient.socket.on('createContainer', function (data) {
-            console.log(data);
+            console.log("create container " + data.host.uuid);
         });
         /**
          * User Events
          */
         SocketClient.socket.on('restartContainer', function (data) {
-            console.log(data);
+            console.log("restartContainer " + data.host.uuid);
         });
         SocketClient.socket.on('startContainer', function (data) {
-            console.log(data);
+            console.log("startContainer " + data.host.uuid);
         });
         SocketClient.socket.on('stopContainer', function (data) {
-            console.log(data);
+            console.log("stopContainer " + data.host.uuid);
         });
         SocketClient.socket.on('pauseContainer', function (data) {
-            console.log(data);
+            console.log("pauseContainer " + data.host.uuid);
         });
         SocketClient.socket.on('resumeContainer', function (data) {
-            console.log(data);
+            console.log("resumeContainer " + data.host.uuid);
         });
         /**
          *  Status Updates
          */
-        SocketClient.socket.on('disconnect', function () { Supervisor.emitter.emit('socketDisconnected'); });
+        SocketClient.socket.on('disconnect', function () {
+            Supervisor.emitter.emit('socketDisconnected');
+        });
+        SocketClient.socket.on('error', function () {
+            Supervisor.emitter.emit('socketError');
+        });
+        SocketClient.socket.on('reconnect', function () {
+            Supervisor.emitter.emit('socketReconnected');
+        });
+        SocketClient.socket.on('reconnecting', function () {
+            Supervisor.emitter.emit('socketReconnecting');
+        });
+        SocketClient.socket.on('reconnect_error', function () {
+            Supervisor.emitter.emit('socketReconnectingError');
+        });
+        SocketClient.socket.on('reconnect_failed', function () {
+            Supervisor.emitter.emit('socketReconnectFailed');
+        });
     }
 }
 const http = require('http');
