@@ -60,10 +60,6 @@ func (m *Machine) UpdateHardware() (err error) {
 	return nil
 }
 
-func (m Machine) StartSFTP() {
-
-}
-
 func (m Machine) GetDataFolder() (path string) {
 	if runtime.GOOS == "windows" {
 		return "%appdata%\\purecore\\machine-supervisor"
@@ -74,7 +70,12 @@ func (m Machine) GetDataFolder() (path string) {
 
 func (m *Machine) Setup() (err error) {
 	if runtime.GOOS != "windows" {
-		err = setupSSHD()
+		err = m.setupSSHD()
+		if err != nil {
+			return err
+		}
+	} else {
+		m.Log("the account manager isn't available, since this isn't running on a linux-based system", Critical)
 	}
 	err = m.loadDocker()
 	if err != nil {

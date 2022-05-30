@@ -19,7 +19,7 @@ func main() {
 		storage: []Storage{
 			{
 				size: 0,
-				path: "C:\\Users\\happy\\Documents\\purecore-containers",
+				path: "/home/quiquelhappy/containers",
 			},
 		},
 		containers: []Container{
@@ -31,7 +31,7 @@ func main() {
 					mount:  "/data",
 					expiry: 0,
 					memory: 1024 * 1024 * 1024 * 3,
-					cores:  0.5,
+					cores:  0.1,
 				},
 				tag: nil,
 				envs: map[string]string{
@@ -46,19 +46,31 @@ func main() {
 			},
 		},
 	}
-	err := machine.Setup()
 	machine.containers[0].machine = &machine
 	machine.storage[0].machine = &machine
-	go machine.Worker()
+	machine.containers[0].storage = &machine.storage[0]
+	err := machine.setupSSHD()
 	if err != nil {
-		machine.Log("error while setting up: "+err.Error(), Critical)
+		fmt.Println("error while setting up sshd: " + err.Error())
 		return
 	}
-	err = machine.containers[0].Create()
+	password, err := machine.containers[0].CreateUser()
 	if err != nil {
-		machine.Log("error while creating: "+err.Error(), Critical)
+		fmt.Println("error while creating user: " + err.Error())
 		return
 	}
-	machine.containers[0].Start()
+	fmt.Println("created user " + machine.containers[0].id + " with password " + password)
+	/*
+		go machine.Worker()
+		if err != nil {
+			machine.Log("error while setting up: "+err.Error(), Critical)
+			return
+		}
+		err = machine.containers[0].Create()
+		if err != nil {
+			machine.Log("error while creating: "+err.Error(), Critical)
+			return
+		}
+		machine.containers[0].Start()*/
 
 }
