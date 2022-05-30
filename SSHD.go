@@ -152,6 +152,7 @@ func (c Container) CreateUser() (pswd string, err error) {
 	// create the user
 
 	homeDir := filepath.Join(c.machine.homePath(), c.id)
+	homeDataDir := filepath.Join(homeDir, "data")
 	actualDataDir := filepath.Join(c.storage.path, c.id)
 	innerActualData := filepath.Join(actualDataDir, "data")
 
@@ -173,6 +174,9 @@ func (c Container) CreateUser() (pswd string, err error) {
 		return "", err
 	}
 
+	// create data folder (will be used as a mount point)
+	err = os.MkdirAll(homeDataDir, os.ModePerm)
+
 	// create a password
 
 	pswd, err = c.ResetPassword()
@@ -181,9 +185,9 @@ func (c Container) CreateUser() (pswd string, err error) {
 		return "", err
 	}
 
-	// mounting ../data folder onto the users home
+	// mounting ../data folder onto the users home data mount point
 
-	output, err = exec.Command("mount", "--bind", actualDataDir, homeDir).Output()
+	output, err = exec.Command("mount", "--bind", innerActualData, homeDataDir).Output()
 	if err != nil {
 		c.machine.Log("error while mounting the ref directory for user #"+c.id+": "+string(output), Debug)
 		return "", err
@@ -214,7 +218,8 @@ func (c Container) CreateUser() (pswd string, err error) {
 
 func (c Container) RemoveUser() (err error) {
 	c.machine.Log("removing ssh user #"+c.id, Debug)
-	_, err = exec.Command("/usr/sbin/userdel", c.id).Output()
+	_, err = exec.Command("/usr/sbin/userdel", "-f", c.id).Output()
 	homeDir := filepath.Join(c.machine.homePath(), c.id)
-	return os.Remove(homeDir)
+	exec.Command("umount", "-l", filepath.Join(homeDir, "data"))
+	return os.RemoveAll(homeDir)
 }
