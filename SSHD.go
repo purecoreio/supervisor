@@ -3,7 +3,6 @@ package main
 import (
 	"bufio"
 	"errors"
-	"fmt"
 	"github.com/sethvargo/go-password/password"
 	"os"
 	"os/exec"
@@ -33,11 +32,7 @@ func (m Machine) homePath() (path string) {
 }
 
 func (m Machine) createHomeContainer() (er error) {
-	err := os.MkdirAll(m.homePath(), os.ModePerm)
-	if err != nil {
-		return err
-	}
-	return m.setJail(m.homePath())
+	return os.MkdirAll(m.homePath(), os.ModePerm)
 }
 
 func (m Machine) setJail(path string) (err error) {
@@ -45,7 +40,8 @@ func (m Machine) setJail(path string) (err error) {
 	if err != nil {
 		return err
 	}
-	return os.Chmod(path, 755)
+	_, err = exec.Command("chmod", "755", path).Output()
+	return err
 }
 
 func (m Machine) setupSSHD() (err error) {
@@ -109,8 +105,8 @@ func (m Machine) setupSSHD() (err error) {
 	if !foundGroupMatching {
 		m.Log("appending sshd group match rule", Debug)
 		output += "Match Group " + m.getGroup() + "\n"
-		output += "  ForceCommand internal-sftp\n"
-		output += "  ChrootDirectory /etc/purecore/supervisor/containers/%u\n"
+		output += "  ForceCommand internal-sftp -d /data\n"
+		output += "  ChrootDirectory " + m.homePath() + "%u\n"
 	}
 
 	if updated {
@@ -120,6 +116,8 @@ func (m Machine) setupSSHD() (err error) {
 			return err
 		}
 		_, err = overwrite.WriteString(output)
+		m.Log("restarting sshd", Debug)
+		exec.Command("systemctl", "restart", "ssh.service")
 	}
 
 	return err
@@ -135,50 +133,88 @@ func (c Container) ResetPassword() (pswd string, err error) {
 	if c.id == "root" {
 		return "", errors.New("protected a request to change root's password")
 	}
-	fmt.Println("echo \"" + c.id + ":" + pswd + "\" | /usr/sbin/chpasswd")
 	output, err := exec.Command("bash", "-c", "echo \""+c.id+":"+pswd+"\" | /usr/sbin/chpasswd").Output()
 	if err != nil {
 		c.machine.Log("password reset for #"+c.id+" error, output was: "+string(output), Debug)
 		return "", err
 	}
-	fmt.Println("sftp://" + c.id + ":" + pswd + "@65.108.83.183")
+	c.machine.Log("user #"+c.id+" can connect using sftp://"+c.id+":"+pswd+"@65.108.83.183", Debug)
 	return pswd, nil
 }
 
+func (c Container) Chown(path string) (err error) {
+	_, err = exec.Command("chown", "-R", c.id+":"+c.machine.getGroup(), path).Output()
+	return err
+}
+
 func (c Container) CreateUser() (pswd string, err error) {
+
 	// create the user
+
+	homeDir := filepath.Join(c.machine.homePath(), c.id)
+	actualDataDir := filepath.Join(c.storage.path, c.id)
+	innerActualData := filepath.Join(actualDataDir, "data")
+
+	// creating data folder
+
+	c.machine.Log("creating login entry point link for user #"+c.id, Debug)
+	err = os.MkdirAll(innerActualData, os.ModePerm)
+	if err != nil {
+		c.machine.Log("error while creating login entry point folder user #"+c.id+": "+err.Error(), Debug)
+		return "", err
+	}
+
+	// create user
+
 	c.machine.Log("creating ssh user #"+c.id, Debug)
-	output, err := exec.Command("/usr/sbin/useradd", "-m", "-d", c.storage.path+string(os.PathSeparator)+c.id, "-G", c.machine.getGroup(), c.id).Output()
+	output, err := exec.Command("/usr/sbin/useradd", "-m", "-d", homeDir, "-G", c.machine.getGroup(), "--shell", "/bin/false", c.id).Output()
 	if err != nil {
 		c.machine.Log("ssh user creation error for #"+c.id+", output was: "+string(output), Debug)
 		return "", err
 	}
+
 	// create a password
+
 	pswd, err = c.ResetPassword()
-	c.machine.Log("creating chroot subdirectory for user #"+c.id, Debug)
-	output, err = exec.Command("install", "-d", "-m", "0755", "-o", c.id, "-g", c.machine.getGroup(), c.storage.path+string(os.PathSeparator)+c.id+string(os.PathSeparator)+"data").Output()
 	if err != nil {
-		c.machine.Log("error while creating chroot subdirectory for user #"+c.id+", output was: "+string(output), Debug)
+		c.machine.Log("error while resetting password for user #"+c.id, Debug)
 		return "", err
 	}
-	// link the sshd login entry point to the user's home
-	c.machine.Log("creating login entry point link for user #"+c.id, Debug)
-	symlink := filepath.Join(c.machine.homePath(), c.id)
-	err = os.Symlink(c.storage.path+string(os.PathSeparator)+c.id+string(os.PathSeparator), symlink)
+
+	// mounting ../data folder onto the users home
+
+	output, err = exec.Command("mount", "--bind", actualDataDir, homeDir).Output()
 	if err != nil {
-		c.machine.Log("error while creating login entry point link for user #"+c.id+": "+err.Error(), Debug)
+		c.machine.Log("error while mounting the ref directory for user #"+c.id+": "+string(output), Debug)
 		return "", err
 	}
-	// jailing parent directory
-	err = c.machine.setJail(c.storage.path + string(os.PathSeparator))
+
+	// jail user
+
+	err = c.machine.setJail(homeDir)
 	if err != nil {
-		c.machine.Log("error while jailing original parent directory for user #"+c.id+": "+err.Error(), Debug)
+		c.machine.Log("error while jailing user #"+c.id+": "+err.Error(), Debug)
+		return "", err
+	}
+	err = c.machine.setJail(actualDataDir)
+	if err != nil {
+		c.machine.Log("error while jailing user #"+c.id+": "+err.Error(), Debug)
+		return "", err
+	}
+
+	// chown data
+
+	err = c.Chown(innerActualData)
+	if err != nil {
+		c.machine.Log("error while chowning the login home for the user #"+c.id+": "+err.Error(), Debug)
 		return "", err
 	}
 	return pswd, err
 }
 
-func (c Container) RemoveUser() {
+func (c Container) RemoveUser() (err error) {
 	c.machine.Log("removing ssh user #"+c.id, Debug)
-	exec.Command("/usr/sbin/userdel", c.id)
+	_, err = exec.Command("/usr/sbin/userdel", c.id).Output()
+	homeDir := filepath.Join(c.machine.homePath(), c.id)
+	return os.Remove(homeDir)
 }

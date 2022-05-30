@@ -108,13 +108,13 @@ func (c Container) getMountPath() (path string, err error) {
 	if c.storage == nil {
 		return "", errors.New("this container doesn't have an attached storage method")
 	}
-	return filepath.FromSlash(c.storage.path + "/" + c.id), nil
+	return filepath.Join(c.storage.path, c.id, "data"), nil
 }
 
-func (c *Container) Create() (err error) {
+func (c *Container) Create() (passwd string, err error) {
 	// 0. check if the image already exists
 	if c.localId != nil {
-		return errors.New("this container already exists")
+		return "", errors.New("this container already exists")
 	}
 	// 1. look for a suitable hardware resources
 	for _, storage := range c.machine.storage {
@@ -125,17 +125,17 @@ func (c *Container) Create() (err error) {
 		}
 	}
 	if c.storage == nil {
-		return errors.New("not enough space")
+		return "", errors.New("not enough space")
 	}
 	resources := container.Resources{}
 	if c.template.memory > 0 && c.machine.hardware.GetAvailableMemory() < uint64(c.template.memory) {
-		return errors.New("not enough memory")
+		return "", errors.New("not enough memory")
 	} else if c.template.memory > 0 {
 		resources.Memory = int64(c.template.memory)
 		resources.MemorySwap = resources.Memory
 	}
 	if c.template.cores > 0 && c.machine.hardware.GetAvailableCores() < c.template.cores {
-		return errors.New("not enough cpu cores")
+		return "", errors.New("not enough cpu cores")
 	} else if c.template.cores > 0 {
 		resources.CPUPeriod = 100000
 		resources.CPUQuota = int64(100000 * c.template.cores)
@@ -143,16 +143,16 @@ func (c *Container) Create() (err error) {
 	// 2. pull image
 	err = c.PullImage()
 	if err != nil {
-		return err
+		return "", err
 	}
 	// 3. create container
 	networkBinds, portSet, err := c.getPortBindings()
 	if err != nil {
-		return err
+		return "", err
 	}
 	mountPath, err := c.getMountPath()
 	if err != nil {
-		return err
+		return "", err
 	}
 	hostConfig := container.HostConfig{
 		PortBindings: networkBinds,
@@ -180,11 +180,13 @@ func (c *Container) Create() (err error) {
 		ExposedPorts: portSet,
 	}, &hostConfig, nil, nil, c.machine.getFullPrefix()+c.id)
 	if err != nil {
-		return err
+		return "", err
 	}
 	// 3. container created, attach container id to the container data
 	c.localId = create.ID
-	return nil
+
+	// 4. create the user
+	return c.CreateUser()
 }
 
 func (c Container) GetLocalId() (id string, err error) {
@@ -214,6 +216,7 @@ func (c *Container) Delete(completeDelete bool) (err error) {
 		}
 		c.RemoveFromList()
 	}
+	c.RemoveUser()
 	return err
 }
 
