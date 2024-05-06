@@ -2,7 +2,7 @@
 <project version="4">
   <component name="ProjectModuleManager">
     <modules>
-      <module fileurl="file://$PROJECT_DIR$/.idea/machine-supervisor.iml" filepath="$PROJECT_DIR$/.idea/machine-supervisor.iml" />
+      <module fileurl="file://$PROJECT_DIR$/.idea/supervisor.iml" filepath="$PROJECT_DIR$/.idea/supervisor.iml" />
     </modules>
   </component>
 </project>
