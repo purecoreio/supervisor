@@ -7,7 +7,10 @@ import (
 	"flag"
 	"github.com/gorilla/websocket"
 	log "github.com/sirupsen/logrus"
+	"net"
 	"net/url"
+	"os"
+	"slices"
 	"supervisor/machine/container"
 	"supervisor/machine/proto"
 	"time"
@@ -33,8 +36,10 @@ func (m Machine) Init(token string, try int) (err error) {
 	}
 	time.Sleep(time.Second * time.Duration(try*5))
 	try += 1
-	params := url.Values{}
-	params.Set("token", token)
+	params, err := m.getLoginString()
+	if err != nil {
+		return err
+	}
 	u := url.URL{Scheme: "ws", Host: *addr, Path: "/machine"}
 	u.RawQuery = params.Encode()
 	m.logger().Info("connecting")
@@ -165,6 +170,60 @@ func (m Machine) Init(token string, try int) (err error) {
 		m.logger().Error("socket closed " + err.Error())
 	}
 	return m.Init(token, try)
+}
+
+func (m Machine) getLoginString() (params url.Values, err error) {
+
+	// 1. hostname
+	hostname, err := os.Hostname()
+	if err != nil {
+		return nil, err
+	}
+
+	// 2. token
+	token, err := m.getToken()
+	if err != nil {
+		return nil, err
+	}
+
+	// 3. networking
+	var inets []proto.Inet // list of non-empty network interfaces
+	interfaces, err := net.Interfaces()
+	if err != nil {
+		return nil, err
+	}
+	for _, inet := range interfaces {
+		addressList, err := inet.Addrs()
+		if err != nil {
+			return nil, err
+		}
+		var validIps []string
+		for _, inetAddr := range addressList {
+			ip, _, err := net.ParseCIDR(inetAddr.String())
+			if err != nil {
+				return nil, err
+			}
+
+			if !ip.IsLoopback() {
+				slices.Insert(validIps, len(validIps), ip.String())
+			}
+		}
+		if len(validIps) > 0 {
+			slices.Insert(inets, len(inets), proto.Inet{
+				Name: inet.Name,
+				Addr: validIps,
+			})
+		}
+	}
+	serializedInets, err := json.Marshal(inets)
+	if err != nil {
+		return nil, err
+	}
+	params = url.Values{}
+	params.Set("token", *token)
+	params.Set("hostname", hostname)
+	params.Set("inets", string(serializedInets)) // should escape URL formatting
+	return params, err
 }
 
 func (m Machine) logger() (entry *log.Entry) {
