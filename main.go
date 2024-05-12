@@ -1,18 +1,12 @@
 package main
 
-import (
-	"supervisor/machine"
-)
+import "supervisor/machine"
+
+var m = machine.Machine{
+	Group:     "serverbench",
+	Directory: "/etc/serverbench/supervisor/containers/",
+}
 
 func main() {
-	self := machine.Machine{
-		Group:     "serverbench",
-		Directory: "/etc/serverbench/supervisor/containers/",
-		Id:        "<example-machine>",
-	}
-
-	err := self.Init("test", 0)
-	if err != nil {
-		return
-	}
+	Execute()
 }

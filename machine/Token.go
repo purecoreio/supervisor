@@ -1,8 +1,11 @@
 package machine
 
-import "os"
+import (
+	"errors"
+	"os"
+)
 
-func (m Machine) getToken() (token *string, err error) {
+func (m Machine) GetToken() (token *string, err error) {
 	m.logger().Info("reading token")
 	path, err := m.getTokenPath()
 	if err != nil {
@@ -13,7 +16,11 @@ func (m Machine) getToken() (token *string, err error) {
 		m.logger().Error("error reading token")
 		return nil, err
 	}
-	*token = string(tokenBytes)
+	tokenVal := string(tokenBytes)
+	if len(tokenVal) <= 0 {
+		return nil, errors.New("the token is empty")
+	}
+	token = &tokenVal
 	m.logger().Info("token read")
 	return token, err
 }
@@ -21,17 +28,32 @@ func (m Machine) getToken() (token *string, err error) {
 func (m Machine) getTokenPath() (path *string, err error) {
 	// ensure the token path exists
 	m.logger().Info("accessing token store")
-	*path = "/etc/serverbench/supervisor/token"
-	err = os.MkdirAll(*path, os.ModePerm)
+	accPath := "/etc/serverbench/supervisor"
+	err = os.MkdirAll(accPath, os.ModePerm)
 	if err != nil {
 		m.logger().Error("error while accessing/creating token store")
 		return nil, err
 	}
+	accPath += "/token"
+	file, err := os.OpenFile(accPath, os.O_RDONLY|os.O_CREATE, 0666)
+	if err != nil {
+		m.logger().Error("error touching token")
+		return nil, err
+	}
+	err = file.Close()
+	if err != nil {
+		m.logger().Error("error detaching (touch) token")
+		return nil, err
+	}
 	m.logger().Info("exited token store")
+	path = &accPath
 	return path, err
 }
 
-func (m Machine) updateToken(token string) (err error) {
+func (m Machine) UpdateToken(token string) (err error) {
+	if len(token) <= 0 {
+		return errors.New("the token is empty")
+	}
 	path, err := m.getTokenPath()
 	if err != nil {
 		return err

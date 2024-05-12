@@ -2,15 +2,17 @@ package machine
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"errors"
 	"flag"
+	"github.com/docker/docker/client"
 	"github.com/gorilla/websocket"
 	log "github.com/sirupsen/logrus"
 	"net"
 	"net/url"
 	"os"
-	"slices"
+	"strconv"
 	"supervisor/machine/container"
 	"supervisor/machine/proto"
 	"time"
@@ -20,156 +22,175 @@ var (
 	newline = []byte{'\n'}
 	space   = []byte{' '}
 	addr    = flag.String("addr", "hansel.serverbench.io", "http service address")
+	ctx     = context.Background()
 )
 
 type Machine struct {
-	Id        string
 	Directory string // /etc/serverbench/supervisor/containers/
 	Group     string // serverbench
 	conn      *websocket.Conn
+	cli       *client.Client
 }
 
-func (m Machine) Init(token string, try int) (err error) {
+func (m Machine) Init(try int) (err error) {
 	m.logger().Info("preparing connection")
 	if try > 13 {
 		try -= 1
 	}
 	time.Sleep(time.Second * time.Duration(try*5))
-	try += 1
-	params, err := m.getLoginString()
-	if err != nil {
-		return err
-	}
-	u := url.URL{Scheme: "ws", Host: *addr, Path: "/machine"}
-	u.RawQuery = params.Encode()
-	m.logger().Info("connecting")
-	dial, _, err := websocket.DefaultDialer.Dial(u.String(), nil)
+	cli, err := client.NewClientWithOpts(client.FromEnv)
 	if err == nil {
-		m.logger().Info("connected")
-		try = 0
-		m.conn = dial
-		defer func() {
-			m.conn.Close()
-		}()
-
-		for {
-			_, in, err := m.conn.ReadMessage()
-			if err != nil {
-				// socket closed, reconnect
-				break
-			}
-			message := proto.Message{}
-			err = json.Unmarshal(bytes.TrimSpace(bytes.Replace(in, newline, space, -1)), &message)
-			if err != nil {
-				m.logger().Error("malformed message received (" + string(in) + ") " + err.Error())
-				continue
-			}
-			var reply *proto.Response = nil
-			switch message.Realm {
-			case "container":
-				{
-					target := container.Container{
-						Id: *message.Target,
-					}
-					switch message.Command {
-					// host, unhost, update, password
-					case "host":
-						{
-							var newTarget = container.Container{}
-							err = json.Unmarshal([]byte(*message.Data), &newTarget)
-							if err == nil {
-								if newTarget.Id != target.Id {
-									err = errors.New("id mismatch")
-								} else {
-									target = newTarget
-									err = m.Host(target)
-								}
-							}
-							break
-						}
-					case "delete":
-						{
-							err = m.Unhost(target)
-							break
-						}
-					case "password":
-						{
-							pswd, err := m.resetPassword(target.Username())
-							if err == nil {
-								reply = &proto.Response{
-									Rid:     message.Rid,
-									Content: pswd,
-								}
-							}
-							break
-						}
-					// power
-					case "start":
-						{
-							break
-						}
-					case "stop":
-						{
-							break
-						}
-					case "restart":
-						{
-							break
-						}
-					case "pause":
-						{
-							break
-						}
-					case "unpause":
-						{
-							break
-						}
-					// monitoring
-					case "status":
-						{
-							break
-						}
-					case "logs":
-						{
-							break
-						}
-					case "exec":
-						{
-							break
-						}
-					case "detach":
-						{
-							break
-						}
-					}
+		m.cli = cli
+		try += 1
+		params, err := m.getLoginString()
+		if err != nil {
+			return err
+		}
+		u := url.URL{Scheme: "ws", Host: *addr, Path: "/machine"}
+		u.RawQuery = params.Encode()
+		m.logger().Info("connecting")
+		dial, _, err := websocket.DefaultDialer.Dial(u.String(), nil)
+		if err == nil {
+			m.logger().Info("connected")
+			try = 0
+			m.conn = dial
+			for {
+				_, in, err := m.conn.ReadMessage()
+				if err != nil {
+					// socket closed, reconnect
 					break
 				}
-			}
-			if err == nil {
-				reply = &proto.Response{
-					Rid: message.Rid,
+				message := proto.Message{}
+				err = json.Unmarshal(bytes.TrimSpace(bytes.Replace(in, newline, space, -1)), &message)
+				if err != nil {
+					m.logger().Error("malformed message received (" + string(in) + ") " + err.Error())
+					continue
 				}
-			} else {
-				reply = &proto.Response{
+
+				var reply *proto.Response = nil
+				switch message.Realm {
+				case "container":
+					{
+						target := container.Container{
+							Id: *message.Target,
+						}
+						switch message.Command {
+						// host, unhost, update, password
+						case "host":
+							{
+								var newTarget = container.Container{}
+								err = json.Unmarshal([]byte(*message.Data), &newTarget)
+								if err == nil {
+									if newTarget.Id != target.Id {
+										err = errors.New("id mismatch")
+									} else {
+										target = newTarget
+										err = m.Host(target)
+									}
+								}
+								break
+							}
+						case "delete":
+							{
+								err = m.Unhost(target)
+								break
+							}
+						case "password":
+							{
+								pswd, err := m.resetPassword(target.Username())
+								if err == nil {
+									reply = &proto.Response{
+										Rid:   message.Rid,
+										Type:  "password",
+										Data:  *pswd,
+										Error: false,
+									}
+								}
+								break
+							}
+						case "logs":
+							{
+								go func() {
+									target.GetStream(message.Rid, m.conn).StreamLogs(m.cli)
+								}()
+								break
+							}
+						// power
+						case "start":
+							{
+								break
+							}
+						case "stop":
+							{
+								break
+							}
+						case "restart":
+							{
+								break
+							}
+						case "pause":
+							{
+								break
+							}
+						case "unpause":
+							{
+								break
+							}
+						// monitoring
+						case "status":
+							{
+								break
+							}
+						case "exec":
+							{
+								break
+							}
+						case "detach":
+							{
+								break
+							}
+						}
+						break
+					}
+				}
+				isError := false
+				if err != nil {
+					isError = true
+					m.logger().Info("sending errored ack: " + err.Error())
+				} else {
+					m.logger().Info("sending ok ack")
+				}
+				err = m.conn.WriteJSON(proto.Response{
 					Rid:   message.Rid,
-					Error: true,
+					Type:  "ack",
+					Error: isError,
+				})
+				if err != nil {
+					m.logger().Error("error while encoding ack: " + err.Error())
+					continue
 				}
-				m.logger().Warn("forwarding error: " + err.Error())
-			}
-			encodedResponse, err := json.Marshal(reply)
-			if err == nil {
-				m.logger().Info("reply " + string(encodedResponse))
-			} else {
-				m.logger().Error("error while encoding response: " + err.Error())
+				m.logger().Info("sent ack: " + message.Rid)
+
+				if reply != nil {
+					err := m.conn.WriteJSON(reply)
+					if err != nil {
+						m.logger().Error("error while response for " + message.Rid + ": " + err.Error())
+						continue
+					} else {
+						m.logger().Info("sent reply for " + message.Rid)
+					}
+				}
 			}
 		}
-	}
-	if err == nil {
-		m.logger().Info("socket closed")
+		if err == nil {
+			m.logger().Info("socket closed")
+		} else {
+			m.logger().Error("socket closed " + err.Error())
+		}
 	} else {
-		m.logger().Error("socket closed " + err.Error())
+		m.logger().Error("error while getting docker: " + err.Error())
 	}
-	return m.Init(token, try)
+	return m.Init(try)
 }
 
 func (m Machine) getLoginString() (params url.Values, err error) {
@@ -181,13 +202,13 @@ func (m Machine) getLoginString() (params url.Values, err error) {
 	}
 
 	// 2. token
-	token, err := m.getToken()
+	token, err := m.GetToken()
 	if err != nil {
 		return nil, err
 	}
 
 	// 3. networking
-	var inets []proto.Inet // list of non-empty network interfaces
+	var inets []container.Ip // list of non-empty network interfaces
 	interfaces, err := net.Interfaces()
 	if err != nil {
 		return nil, err
@@ -197,7 +218,6 @@ func (m Machine) getLoginString() (params url.Values, err error) {
 		if err != nil {
 			return nil, err
 		}
-		var validIps []string
 		for _, inetAddr := range addressList {
 			ip, _, err := net.ParseCIDR(inetAddr.String())
 			if err != nil {
@@ -205,16 +225,15 @@ func (m Machine) getLoginString() (params url.Values, err error) {
 			}
 
 			if !ip.IsLoopback() {
-				slices.Insert(validIps, len(validIps), ip.String())
+				inets = append(inets, container.Ip{
+					Ip:        inetAddr.String(),
+					Adapter:   inet.Name,
+					Available: true,
+				})
 			}
 		}
-		if len(validIps) > 0 {
-			slices.Insert(inets, len(inets), proto.Inet{
-				Name: inet.Name,
-				Addr: validIps,
-			})
-		}
 	}
+	m.logger().Info("found addresses: " + strconv.Itoa(len(inets)))
 	serializedInets, err := json.Marshal(inets)
 	if err != nil {
 		return nil, err
@@ -227,19 +246,20 @@ func (m Machine) getLoginString() (params url.Values, err error) {
 }
 
 func (m Machine) logger() (entry *log.Entry) {
-	return log.WithFields(log.Fields{
-		"machine": m.Id,
-	})
+	return log.WithFields(log.Fields{}) // TODO explore
 }
 
 func (m Machine) Host(container container.Container) (err error) {
 	m.logger().Info("hosting " + container.Id)
-	_, err = m.createUser(container.Username(), container.Settings.Path)
+	_, err = m.createUser(container.Username(), container.Path)
 	if err != nil {
 		return err
 	}
 
 	// container should mount volume onto settings.path/data
+	go func() {
+		_ = container.Start(m.cli, ctx)
+	}()
 	m.logger().Info("hosted " + container.Id)
 	return nil
 }

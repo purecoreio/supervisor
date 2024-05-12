@@ -1,6 +1,6 @@
 package container
 
-type Variable struct {
+type HostingTemplateVariable struct {
 	Key   string  `json:"key"`
 	Value *string `json:"value"`
 }
