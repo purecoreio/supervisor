@@ -1,6 +1,8 @@
 package main
 
-import "supervisor/machine"
+import (
+	"supervisor/machine"
+)
 
 var m = machine.Machine{
 	Group:     "serverbench",
