@@ -31,15 +31,13 @@ var (
 )
 
 type Machine struct {
-	Directory  string // /etc/serverbench/supervisor/containers/
-	Group      string // serverbench
 	Containers map[string]container.Container
 	events     chan []byte
 	conn       *websocket.Conn
 	cli        *client.Client
 }
 
-func (m Machine) Init(try int) (err error) {
+func (m *Machine) Init(try int) (err error) {
 	// don't allow tries to go increase wait times infinitely
 	if try > 12 {
 		try -= 1
@@ -54,17 +52,17 @@ func (m Machine) Init(try int) (err error) {
 		return m.Init(try + 1)
 	}
 	// list local containers
-	m.Containers, err = m.loadContainersFromDocker()
+	err = m.loadContainersFromDocker()
 	if err != nil {
 		m.logger().Error("unable to list hosted containers locally")
 		return m.Init(try + 1)
 	}
 	// events
-	err = m.listenForEvents()
+	/* err = m.listenForEvents()
 	if err != nil {
 		m.logger().Error("unable to list hosted containers locally")
 		return m.Init(try + 1)
-	}
+	}*/
 	// connect
 	params, err := m.getLoginString()
 	if err != nil {
@@ -118,35 +116,35 @@ func (m Machine) Init(try int) (err error) {
 	return m.Init(try + 1)
 }
 
-func (m Machine) loadContainersFromDocker() (containers map[string]container.Container, err error) {
-	containers = make(map[string]container.Container)
+func (m *Machine) loadContainersFromDocker() (err error) {
+	m.Containers = make(map[string]container.Container)
 	if m.cli == nil {
 		err = errors.New("invalid cli")
-		return containers, err
+		return err
 	}
 	dContainers, err := m.cli.ContainerList(ctx, dContainer.ListOptions{
 		All: true,
 	})
 	if err != nil {
-		return containers, err
+		return err
 	}
 	prefix := "/sb-"
 	for _, c := range dContainers {
 		for _, name := range c.Names {
 			if strings.HasPrefix(name, prefix) {
 				containerId := name[len(prefix):]
-				containers[containerId] = container.Container{
+				m.Containers[containerId] = container.Container{
 					Id: containerId,
 				}
-				containers[containerId].Handler.Init(&m.events, containerId, m.Containers[containerId].Username(), m.cli)
+				m.Containers[containerId].Handler.Init(&m.events, containerId, m.Containers[containerId].Username(), m.cli)
 				m.logger().Infof("loaded container %s", containerId)
 			}
 		}
 	}
-	return containers, err
+	return err
 }
 
-func (m Machine) listenForEvents() (err error) {
+func (m *Machine) listenForEvents() (err error) {
 	if m.cli == nil {
 		return errors.New("missing cli")
 	}
@@ -175,24 +173,24 @@ func (m Machine) listenForEvents() (err error) {
 				containerId := name[3:]
 				localContainer, ok := m.Containers[containerId]
 				if !ok {
+					m.logger().Info("ignored non-serverbench container event: ", event)
 					continue
 				}
 				err := localContainer.Handler.HandleEvent(listener.Log, string(event.Action))
 				if err != nil {
-					m.logger().Warn("error while handling event: %s", err)
+					m.logger().Warn("error while handling event: ", err)
 					continue
 				}
 			case err := <-errs:
-				m.logger().Error("event listener got an error", err.Error())
+				m.logger().Error("event listener got an error: ", err)
 				time.Sleep(1 * time.Second)
-				m.listenForEvents()
 			}
 		}
 	}()
 	return err
 }
 
-func (m Machine) getLoginString() (params url.Values, err error) {
+func (m *Machine) getLoginString() (params url.Values, err error) {
 
 	// 1. hostname
 	hostname, err := os.Hostname()
@@ -244,31 +242,6 @@ func (m Machine) getLoginString() (params url.Values, err error) {
 	return params, err
 }
 
-func (m Machine) logger() (entry *log.Entry) {
-	return log.WithFields(log.Fields{}) // TODO explore
-}
-
-func (m Machine) Host(container container.Container) (err error) {
-	m.logger().Info("hosting " + container.Id)
-	_, err = m.createUser(container.Username(), container.Path)
-	if err != nil {
-		return err
-	}
-
-	// container should mount volume onto settings.path/data
-	go func() {
-		_ = container.Start(m.cli, ctx)
-	}()
-	m.logger().Info("hosted " + container.Id)
-	return nil
-}
-
-func (m Machine) Unhost(container container.Container) (err error) {
-	m.logger().Info("unhosting " + container.Id)
-	err = m.removeUser(container.Username())
-	if err != nil {
-		return err
-	}
-	m.logger().Info("unhosted " + container.Id)
-	return nil
+func (m *Machine) logger() (entry *log.Entry) {
+	return log.WithFields(log.Fields{})
 }

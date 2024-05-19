@@ -23,6 +23,50 @@ type Container struct {
 	Handler  listener.Handler
 }
 
+var (
+	group     = "serverbench"
+	directory = "/etc/serverbench/containers/"
+)
+
+func (c Container) Host(cli *client.Client, containers map[string]Container) (err error) {
+	c.logger().Info("hosting")
+	_, err = c.createUser()
+	if err != nil {
+		return err
+	}
+	containers[c.Id] = c
+
+	// container should mount volume onto settings.path/data
+	go func() {
+		_ = c.Start(cli, context.Background())
+	}()
+	c.logger().Info("hosted " + c.Id)
+	return nil
+}
+
+func (c Container) Unhost(cli *client.Client, containers map[string]Container) (err error) {
+	c.logger().Info("unhosting " + c.Id)
+	_ = c.Kill(cli)
+	err = c.removeUser()
+	if err != nil {
+		return err
+	}
+	delete(containers, c.Id)
+	c.logger().Info("unhosted " + c.Id)
+	return nil
+}
+
+func (c Container) Kill(cli *client.Client) (err error) {
+	c.logger().Info("killing")
+	err = cli.ContainerKill(context.Background(), c.Id, "SIGHUP")
+	if err != nil {
+		c.logger().Error("unable to kill")
+	} else {
+		c.logger().Info("killed")
+	}
+	return err
+}
+
 func (c Container) logger() (entry *log.Entry) {
 	return log.WithFields(log.Fields{
 		"container": c.Id,

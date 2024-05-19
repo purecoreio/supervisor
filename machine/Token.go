@@ -5,7 +5,7 @@ import (
 	"os"
 )
 
-func (m Machine) GetToken() (token *string, err error) {
+func (m *Machine) GetToken() (token *string, err error) {
 	m.logger().Info("reading token")
 	path, err := m.getTokenPath()
 	if err != nil {
@@ -25,7 +25,7 @@ func (m Machine) GetToken() (token *string, err error) {
 	return token, err
 }
 
-func (m Machine) getTokenPath() (path *string, err error) {
+func (m *Machine) getTokenPath() (path *string, err error) {
 	// ensure the token path exists
 	m.logger().Info("accessing token store")
 	accPath := "/etc/serverbench/supervisor"
@@ -50,7 +50,7 @@ func (m Machine) getTokenPath() (path *string, err error) {
 	return path, err
 }
 
-func (m Machine) UpdateToken(token string) (err error) {
+func (m *Machine) UpdateToken(token string) (err error) {
 	if len(token) <= 0 {
 		return errors.New("the token is empty")
 	}

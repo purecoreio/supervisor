@@ -8,7 +8,7 @@ import (
 	"supervisor/machine/proto"
 )
 
-func (m Machine) handleMessage(message proto.Message) (reply *proto.Response, err error) {
+func (m *Machine) handleMessage(message proto.Message) (reply *proto.Response, err error) {
 	switch message.Realm {
 	case "machine":
 		{
@@ -73,17 +73,17 @@ func (m Machine) handleMessage(message proto.Message) (reply *proto.Response, er
 			switch message.Command {
 			case "host":
 				{
-					err = m.Host(target)
+					err = target.Host(m.cli, m.Containers)
 					break
 				}
 			case "delete":
 				{
-					err = m.Unhost(target)
+					err = target.Unhost(m.cli, m.Containers)
 					break
 				}
 			case "password":
 				{
-					pswd, err := m.resetPassword(target.Username())
+					pswd, err := target.ResetPassword()
 					if err == nil {
 						reply = &proto.Response{
 							Rid:   message.Rid,
