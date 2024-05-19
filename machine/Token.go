@@ -28,13 +28,13 @@ func (m *Machine) GetToken() (token *string, err error) {
 func (m *Machine) getTokenPath() (path *string, err error) {
 	// ensure the token path exists
 	m.logger().Info("accessing token store")
-	accPath := "/etc/serverbench/supervisor"
+	accPath := "/etc/serverbench"
 	err = os.MkdirAll(accPath, os.ModePerm)
 	if err != nil {
 		m.logger().Error("error while accessing/creating token store")
 		return nil, err
 	}
-	accPath += "/token"
+	accPath += "/supervisor.token"
 	file, err := os.OpenFile(accPath, os.O_RDONLY|os.O_CREATE, 0666)
 	if err != nil {
 		m.logger().Error("error touching token")

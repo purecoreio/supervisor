@@ -58,7 +58,7 @@ func (c Container) Unhost(cli *client.Client, containers map[string]Container) (
 
 func (c Container) Kill(cli *client.Client) (err error) {
 	c.logger().Info("killing")
-	err = cli.ContainerKill(context.Background(), c.Id, "SIGHUP")
+	err = cli.ContainerKill(context.Background(), c.Username(), "SIGHUP")
 	if err != nil {
 		c.logger().Error("unable to kill")
 	} else {

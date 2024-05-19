@@ -27,7 +27,11 @@ func (m *Machine) handleMessage(message proto.Message) (reply *proto.Response, e
 								err = errors.New("container not found")
 								return nil, err
 							}
-							err = m.Containers[containerId].Handler.Subscribe(subscriber)
+							handler := m.Containers[containerId].Handler
+							err = handler.Subscribe(subscriber)
+							if err != nil {
+								return nil, err
+							}
 						}
 					}
 					break

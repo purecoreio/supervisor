@@ -32,7 +32,7 @@ var (
 
 type Machine struct {
 	Containers map[string]container.Container
-	events     chan []byte
+	events     chan listener.Event
 	conn       *websocket.Conn
 	cli        *client.Client
 }
@@ -44,7 +44,7 @@ func (m *Machine) Init(try int) (err error) {
 	} else if try > 1 {
 		time.Sleep(time.Second * time.Duration(try*5))
 	}
-	m.events = make(chan []byte)
+	m.events = make(chan listener.Event)
 	// init cli
 	m.cli, err = client.NewClientWithOpts(client.FromEnv, client.WithAPIVersionNegotiation())
 	if err != nil {
@@ -58,11 +58,11 @@ func (m *Machine) Init(try int) (err error) {
 		return m.Init(try + 1)
 	}
 	// events
-	/* err = m.listenForEvents()
+	err = m.listenForEvents()
 	if err != nil {
-		m.logger().Error("unable to list hosted containers locally")
+		m.logger().Error("unable to start event listener", err)
 		return m.Init(try + 1)
-	}*/
+	}
 	// connect
 	params, err := m.getLoginString()
 	if err != nil {
@@ -81,6 +81,15 @@ func (m *Machine) Init(try int) (err error) {
 	try = 0
 	m.conn = dial
 	// handle events
+	go func() {
+		for str := range m.events {
+			err := m.conn.WriteJSON(str)
+			if err != nil {
+				m.logger().Error("unable to forward event (socket likely closed)", err)
+				return
+			}
+		}
+	}()
 	for {
 		_, in, err := m.conn.ReadMessage()
 		if err != nil {
@@ -113,6 +122,7 @@ func (m *Machine) Init(try int) (err error) {
 		}
 		m.logger().Info("fulfilled request: %v", reply)
 	}
+	close(m.events)
 	return m.Init(try + 1)
 }
 
@@ -136,7 +146,8 @@ func (m *Machine) loadContainersFromDocker() (err error) {
 				m.Containers[containerId] = container.Container{
 					Id: containerId,
 				}
-				m.Containers[containerId].Handler.Init(&m.events, containerId, m.Containers[containerId].Username(), m.cli)
+				handler := m.Containers[containerId].Handler
+				handler.Init(&m.events, containerId, m.Containers[containerId].Username(), m.cli)
 				m.logger().Infof("loaded container %s", containerId)
 			}
 		}
@@ -176,7 +187,7 @@ func (m *Machine) listenForEvents() (err error) {
 					m.logger().Info("ignored non-serverbench container event: ", event)
 					continue
 				}
-				err := localContainer.Handler.HandleEvent(listener.Log, string(event.Action))
+				err := localContainer.Handler.HandleEvent(listener.Status, string(event.Action))
 				if err != nil {
 					m.logger().Warn("error while handling event: ", err)
 					continue
@@ -186,6 +197,7 @@ func (m *Machine) listenForEvents() (err error) {
 				time.Sleep(1 * time.Second)
 			}
 		}
+		m.listenForEvents()
 	}()
 	return err
 }

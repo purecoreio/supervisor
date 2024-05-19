@@ -2,15 +2,14 @@ package listener
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/client"
 	log "github.com/sirupsen/logrus"
 	"io"
 	"os"
-	"os/signal"
 	"strconv"
+	"sync/atomic"
 	"syscall"
 	"time"
 )
@@ -21,23 +20,26 @@ type Handler struct {
 	Progress []Subscriber
 	// global
 	client *client.Client
-	Out    *chan []byte
+	Out    *chan Event
 	// id
 	ContainerId   string
 	ContainerName string
 	// logs
 	LastLogRead time.Time
-	LogOpen     bool
+	LogOpen     atomic.Bool
 	StopChan    chan os.Signal
 }
 
-func (h Handler) logger() (entry *log.Entry) {
+func (h *Handler) logger() (entry *log.Entry) {
 	return log.WithFields(log.Fields{
-		"handler": h.ContainerId,
+		"handler":  h.ContainerId,
+		"logs":     len(h.Logs),
+		"progress": len(h.Progress),
+		"status":   len(h.Status),
 	})
 }
 
-func (h Handler) Init(out *chan []byte, id string, name string, client *client.Client) {
+func (h *Handler) Init(out *chan Event, id string, name string, client *client.Client) {
 	h.Out = out
 	h.client = client
 	h.Status = make([]Subscriber, 0)
@@ -46,9 +48,11 @@ func (h Handler) Init(out *chan []byte, id string, name string, client *client.C
 	h.ContainerId = id
 	h.ContainerName = name
 	h.StopChan = make(chan os.Signal, 1)
+	h.LogOpen.Store(false)
 }
 
-func (h Handler) Subscribe(listener Subscriber) (err error) {
+func (h *Handler) Subscribe(listener Subscriber) (err error) {
+	h.logger().Info("subscribing ", listener)
 	if h.Out == nil {
 		err = errors.New("missing out channel")
 		return err
@@ -64,22 +68,18 @@ func (h Handler) Subscribe(listener Subscriber) (err error) {
 			// when a container stops, the log stream stops, so we need to be on the lookout for restart events
 			// to re-attach to the container logs
 			err = errors.New("in order to listen for log events, you must also attach to status events")
-			return err
-		}
-		h.Logs = append(h.Logs, listener)
-		if !h.LogOpen {
-			func() {
-				err := h.streamLogs()
-				if err != nil {
-					return
-				}
-			}()
+		} else {
+			h.Logs = append(h.Logs, listener)
+			if !h.LogOpen.Load() {
+				err = h.streamLogs()
+			}
 		}
 	}
+	h.logger().Info("subscribed ", listener)
 	return err
 }
 
-func (h Handler) Unsubscribe(subscriber Subscriber) (err error) {
+func (h *Handler) Unsubscribe(subscriber Subscriber) (err error) {
 	_, err = h.cleanSubscriberList(subscriber, &h.Status)
 	if err != nil {
 		return err
@@ -88,7 +88,8 @@ func (h Handler) Unsubscribe(subscriber Subscriber) (err error) {
 	if err != nil {
 		return err
 	}
-	if empty {
+	if empty && h.LogOpen.Load() {
+		h.logger().Info("stopping log stream")
 		h.StopChan <- syscall.SIGTERM
 	}
 
@@ -99,7 +100,7 @@ func (h Handler) Unsubscribe(subscriber Subscriber) (err error) {
 	return err
 }
 
-func (h Handler) cleanSubscriberList(subscriber Subscriber, subscriberList *[]Subscriber) (empty bool, err error) {
+func (h *Handler) cleanSubscriberList(subscriber Subscriber, subscriberList *[]Subscriber) (empty bool, err error) {
 	if subscriberList == nil {
 		err = errors.New("invalid subscriber list")
 	} else {
@@ -117,8 +118,7 @@ func (h Handler) cleanSubscriberList(subscriber Subscriber, subscriberList *[]Su
 	return empty, err
 }
 
-func (h Handler) HandleEvent(action Type, content string) (err error) {
-	h.logger().Info("got event %s, %s", action, content)
+func (h *Handler) HandleEvent(action Type, content string) (err error) {
 	var targetListeners *[]Subscriber = nil
 	if action == Log {
 		targetListeners = &h.Logs
@@ -128,6 +128,7 @@ func (h Handler) HandleEvent(action Type, content string) (err error) {
 		targetListeners = &h.Progress
 	} else {
 		err = errors.New("unknown action")
+		h.logger().Errorf("unknown event %s, %s", action, content)
 		return err
 	}
 	for _, targetListener := range *targetListeners {
@@ -137,18 +138,15 @@ func (h Handler) HandleEvent(action Type, content string) (err error) {
 			Container: h.ContainerId,
 			Content:   content,
 		}
-		if event.Type == Status && event.Content == "start" && !h.LogOpen && len(h.Logs) > 0 {
+		if event.Type == Status && event.Content == "start" && !h.LogOpen.Load() && len(h.Logs) > 0 {
 			err := h.streamLogs()
 			if err != nil {
+				h.logger().Errorf("error starting logs after receiving %s, %s", action, content)
 				return err
 			}
 		}
-		bytes, err := json.Marshal(event)
-		if err != nil {
-			return err
-		}
-		h.logger().Info("sending event", event)
-		*h.Out <- bytes
+		*h.Out <- event
+		h.logger().Infof("forwarded event %s, %s", action, content)
 	}
 	return err
 }
@@ -157,59 +155,70 @@ func (h Handler) HandleEvent(action Type, content string) (err error) {
 /**
 IO blocking log streaming
 */
-func (h Handler) streamLogs() (err error) {
+func (h *Handler) streamLogs() (err error) {
+	h.logger().Info("starting log stream")
 	if h.client == nil {
 		err = errors.New("nil client")
+		h.logger().Error("nil client while streaming logs")
 		return err
 	}
-	if h.LogOpen {
+	if h.LogOpen.Load() {
 		err = errors.New("logs already open")
+		h.logger().Error("already streaming logs")
 		return err
 	}
 	if h.LastLogRead.IsZero() {
 		h.LastLogRead = time.Now()
+		h.logger().Info("setting last log read to current time")
 	}
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-	logs, err := h.client.ContainerLogs(ctx, h.ContainerName, container.LogsOptions{
+	logs, err := h.client.ContainerLogs(context.Background(), h.ContainerName, container.LogsOptions{
 		Follow:     true,
 		Since:      strconv.FormatInt(h.LastLogRead.Unix(), 10),
 		ShowStdout: true,
 		ShowStderr: true,
 	})
 	if err != nil {
+		h.logger().Error("error while opening log stream")
 		return err
 	}
-	defer logs.Close()
-	done := make(chan struct{})
-	signal.Notify(h.StopChan, syscall.SIGINT, syscall.SIGTERM)
+
+	h.LogOpen.Store(true)
+
+	// Move the log reading part to a new goroutine
 	go func() {
-		h.LogOpen = true
+
 		buffer := make([]byte, 4096)
+
+		defer logs.Close()
+
+	logStream:
 		for {
-			n, err := logs.Read(buffer)
-			if n > 0 {
-				err := h.HandleEvent(Log, string(buffer[:n]))
-				if err != nil {
-					break
+			select {
+			case <-h.StopChan:
+				{
+					h.logger().Info("log stream stopped")
+					break logStream
+				}
+			default:
+				{
+					n, err := logs.Read(buffer)
+					if n > 0 {
+						err := h.HandleEvent(Log, string(buffer[:n]))
+						if err != nil {
+							break logStream
+						}
+					}
+					if err == io.EOF {
+						break logStream
+					}
 				}
 			}
-			if err == io.EOF {
-				break
-			}
 		}
-		close(done)
+
+		h.logger().Info("log stream ended")
+		h.LastLogRead = time.Now()
+		h.LogOpen.Store(false)
 	}()
 
-	select {
-	case <-h.StopChan:
-		cancel()
-		<-done
-	case <-done:
-	}
-
-	h.LastLogRead = time.Now()
-	h.LogOpen = false
-	cancel()
 	return nil
 }
