@@ -27,8 +27,7 @@ func (m *Machine) handleMessage(message proto.Message) (reply *proto.Response, e
 								err = errors.New("container not found")
 								return nil, err
 							}
-							handler := m.Containers[containerId].Handler
-							err = handler.Subscribe(subscriber)
+							err = m.Containers[containerId].Handler.Subscribe(subscriber)
 							if err != nil {
 								return nil, err
 							}
@@ -65,7 +64,10 @@ func (m *Machine) handleMessage(message proto.Message) (reply *proto.Response, e
 					if err != nil && target.Id != *message.Target {
 						err = errors.New("target mismatch (while creating new container)")
 					} else {
-						target.Handler.Init(&m.events, target.Id, target.Username(), m.cli)
+						err := target.Init(&m.events, m.cli)
+						if err != nil {
+							return nil, err
+						}
 					}
 				} else {
 					err = errors.New("you must provide a hosted container id (unless you are hosting a new container)")

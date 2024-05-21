@@ -4,10 +4,7 @@ import (
 	"supervisor/machine"
 )
 
-var m = machine.Machine{
-	Group:     "serverbench",
-	Directory: "/etc/serverbench/supervisor/containers/",
-}
+var m = machine.Machine{}
 
 func main() {
 	Execute()

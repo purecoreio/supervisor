@@ -2,6 +2,7 @@ package container
 
 import (
 	"context"
+	"errors"
 	"github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/api/types/image"
 	"github.com/docker/docker/api/types/mount"
@@ -9,6 +10,7 @@ import (
 	log "github.com/sirupsen/logrus"
 	"path"
 	"supervisor/machine/container/listener"
+	"supervisor/machine/container/listener/event"
 )
 
 type Container struct {
@@ -20,7 +22,7 @@ type Container struct {
 	Ip       Ip                `json:"ip"`
 	Memory   int               `json:"memory"`
 	Storage  *int              `json:"storage"`
-	Handler  listener.Handler
+	Handler  *listener.Handler
 }
 
 var (
@@ -28,13 +30,33 @@ var (
 	directory = "/etc/serverbench/containers/"
 )
 
-func (c Container) Host(cli *client.Client, containers map[string]Container) (err error) {
+func (c *Container) Init(out *chan event.Entry, cli *client.Client) (err error) {
+	if c.Handler != nil {
+		return errors.New("container already initialized")
+	}
+	handler := listener.Handler{
+		Status:        make([]listener.Subscriber, 0),
+		Logs:          make([]listener.Subscriber, 0),
+		Progress:      make([]listener.Subscriber, 0),
+		Load:          make([]listener.Subscriber, 0),
+		ContainerId:   c.Id,
+		ContainerName: c.Username(),
+		Client:        cli,
+	}
+	err = handler.Forward(out)
+	if err == nil {
+		c.Handler = &handler
+	}
+	return err
+}
+
+func (c *Container) Host(cli *client.Client, containers map[string]Container) (err error) {
 	c.logger().Info("hosting")
 	_, err = c.createUser()
 	if err != nil {
 		return err
 	}
-	containers[c.Id] = c
+	containers[c.Id] = *c
 
 	// container should mount volume onto settings.path/data
 	go func() {
@@ -44,7 +66,7 @@ func (c Container) Host(cli *client.Client, containers map[string]Container) (er
 	return nil
 }
 
-func (c Container) Unhost(cli *client.Client, containers map[string]Container) (err error) {
+func (c *Container) Unhost(cli *client.Client, containers map[string]Container) (err error) {
 	c.logger().Info("unhosting " + c.Id)
 	_ = c.Kill(cli)
 	err = c.removeUser()
@@ -56,24 +78,26 @@ func (c Container) Unhost(cli *client.Client, containers map[string]Container) (
 	return nil
 }
 
-func (c Container) Kill(cli *client.Client) (err error) {
+func (c *Container) Kill(cli *client.Client) (err error) {
 	c.logger().Info("killing")
-	err = cli.ContainerKill(context.Background(), c.Username(), "SIGHUP")
+	err = cli.ContainerRemove(context.Background(), c.Username(), container.RemoveOptions{
+		Force: true,
+	})
 	if err != nil {
-		c.logger().Error("unable to kill")
+		c.logger().Error("unable to kill: ", err)
 	} else {
 		c.logger().Info("killed")
 	}
 	return err
 }
 
-func (c Container) logger() (entry *log.Entry) {
+func (c *Container) logger() (entry *log.Entry) {
 	return log.WithFields(log.Fields{
 		"container": c.Id,
 	})
 }
 
-func (c Container) Start(cli *client.Client, ctx context.Context) (err error) {
+func (c *Container) Start(cli *client.Client, ctx context.Context) (err error) {
 	c.logger().Info("starting container")
 	_, err = cli.ImagePull(ctx, "docker.io/"+c.Template.Image.Uri, image.PullOptions{})
 	if err != nil {
@@ -81,8 +105,10 @@ func (c Container) Start(cli *client.Client, ctx context.Context) (err error) {
 		return err
 	}
 	config := &container.Config{
-		Image: "itzg/minecraft-server",
-		Env:   []string{"EULA=true"},
+		Image:     "itzg/minecraft-server",
+		Env:       []string{"EULA=true"},
+		Tty:       true,
+		OpenStdin: true,
 	}
 	c.logger().Info(path.Join(c.Path, "data"))
 	hostConfig := &container.HostConfig{
@@ -107,6 +133,6 @@ func (c Container) Start(cli *client.Client, ctx context.Context) (err error) {
 	return err
 }
 
-func (c Container) Username() (username string) {
+func (c *Container) Username() (username string) {
 	return "sb-" + c.Id
 }

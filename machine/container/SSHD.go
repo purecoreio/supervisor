@@ -10,12 +10,12 @@ import (
 	"strings"
 )
 
-func (c Container) setupDirectory(directory string) (err error) {
+func (c *Container) setupDirectory(directory string) (err error) {
 	c.logger().Info("creating sshd directory")
 	return os.MkdirAll(directory, os.ModePerm)
 }
 
-func (c Container) setupGroup(group string) (err error) {
+func (c *Container) setupGroup(group string) (err error) {
 	c.logger().Info("creating sshd group")
 	output, err := exec.Command("groupadd", "-f", group).Output()
 	if err != nil {
@@ -24,12 +24,12 @@ func (c Container) setupGroup(group string) (err error) {
 	return err
 }
 
-func (c Container) commentOut(original string) (output string) {
+func (c *Container) commentOut(original string) (output string) {
 	c.logger().Info("commenting out: " + original)
 	return "# before serverbench: " + original + "\n"
 }
 
-func (c Container) setupSshdJail(group string, directory string) (err error) {
+func (c *Container) setupSshdJail(group string, directory string) (err error) {
 	c.logger().Info("setting up sshd")
 	sshdConfig := "/etc/ssh/sshd_config"
 	file, err := os.OpenFile(sshdConfig, os.O_RDWR, 0644)
@@ -93,7 +93,7 @@ func (c Container) setupSshdJail(group string, directory string) (err error) {
 	return err
 }
 
-func (c Container) setupMount(home string, username string, group string) (err error) {
+func (c *Container) setupMount(home string, username string, group string) (err error) {
 	homeData := filepath.Join(home, "data")
 	targetData := filepath.Join(c.Path, "data")
 
@@ -139,7 +139,7 @@ func (c Container) setupMount(home string, username string, group string) (err e
 	return nil
 }
 
-func (c Container) setChown(username string, path string, group string) (err error) {
+func (c *Container) setChown(username string, path string, group string) (err error) {
 	output, err := exec.Command("chown", "-R", username+":"+group, path).Output()
 	if err != nil {
 		c.logger().Error("error while chowning (target jailing): " + string(output))
@@ -148,7 +148,7 @@ func (c Container) setChown(username string, path string, group string) (err err
 	return err
 }
 
-func (c Container) setJail(path string) (err error) {
+func (c *Container) setJail(path string) (err error) {
 	err = os.Chown(path, 0, 0)
 	if err != nil {
 		c.logger().Error("error while chowning (jailing) " + path + ": " + err.Error())
@@ -162,7 +162,7 @@ func (c Container) setJail(path string) (err error) {
 	return err
 }
 
-func (c Container) ResetPassword() (pswd *string, err error) {
+func (c *Container) ResetPassword() (pswd *string, err error) {
 	username := c.Username()
 	c.logger().Info("resetting " + username + " password")
 	if username == "root" {
@@ -183,7 +183,7 @@ func (c Container) ResetPassword() (pswd *string, err error) {
 	return pswd, nil
 }
 
-func (c Container) createUser() (pswd *string, err error) {
+func (c *Container) createUser() (pswd *string, err error) {
 	username := c.Username()
 	c.logger().Info("creating user " + username + " (" + c.Path + ")")
 	if username == "root" {
@@ -228,7 +228,7 @@ func (c Container) createUser() (pswd *string, err error) {
 	return resetPassword, err
 }
 
-func (c Container) removeUser() (err error) {
+func (c *Container) removeUser() (err error) {
 	username := c.Username()
 	c.logger().Info("removing user " + username)
 	output, err := exec.Command("/usr/sbin/userdel", "-f", username).Output()

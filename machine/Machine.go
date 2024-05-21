@@ -18,8 +18,9 @@ import (
 	"strconv"
 	"strings"
 	"supervisor/machine/container"
-	"supervisor/machine/container/listener"
+	"supervisor/machine/container/listener/event"
 	"supervisor/machine/proto"
+	"sync"
 	"time"
 )
 
@@ -32,9 +33,10 @@ var (
 
 type Machine struct {
 	Containers map[string]container.Container
-	events     chan listener.Event
+	events     chan event.Entry
 	conn       *websocket.Conn
 	cli        *client.Client
+	outMutex   sync.Mutex
 }
 
 func (m *Machine) Init(try int) (err error) {
@@ -44,7 +46,7 @@ func (m *Machine) Init(try int) (err error) {
 	} else if try > 1 {
 		time.Sleep(time.Second * time.Duration(try*5))
 	}
-	m.events = make(chan listener.Event)
+	m.events = make(chan event.Entry)
 	// init cli
 	m.cli, err = client.NewClientWithOpts(client.FromEnv, client.WithAPIVersionNegotiation())
 	if err != nil {
@@ -83,7 +85,9 @@ func (m *Machine) Init(try int) (err error) {
 	// handle events
 	go func() {
 		for str := range m.events {
+			m.outMutex.Lock()
 			err := m.conn.WriteJSON(str)
+			m.outMutex.Unlock()
 			if err != nil {
 				m.logger().Error("unable to forward event (socket likely closed)", err)
 				return
@@ -104,17 +108,21 @@ func (m *Machine) Init(try int) (err error) {
 		}
 		m.logger().Info("received request: %v", message)
 		reply, err := m.handleMessage(message)
+		m.outMutex.Lock()
 		err = m.conn.WriteJSON(proto.Response{
 			Rid:   message.Rid,
 			Type:  "ack",
 			Error: err != nil,
 		})
+		m.outMutex.Unlock()
 		if err != nil {
 			m.logger().Warn("error while encoding ack: " + err.Error())
 			continue
 		}
 		if reply != nil {
+			m.outMutex.Lock()
 			err := m.conn.WriteJSON(reply)
+			m.outMutex.Unlock()
 			if err != nil {
 				m.logger().Warn("error while replying %s: %v", message.Rid, err)
 				continue
@@ -143,11 +151,14 @@ func (m *Machine) loadContainersFromDocker() (err error) {
 		for _, name := range c.Names {
 			if strings.HasPrefix(name, prefix) {
 				containerId := name[len(prefix):]
-				m.Containers[containerId] = container.Container{
+				cont := container.Container{
 					Id: containerId,
 				}
-				handler := m.Containers[containerId].Handler
-				handler.Init(&m.events, containerId, m.Containers[containerId].Username(), m.cli)
+				err := cont.Init(&m.events, m.cli)
+				if err != nil {
+					return err
+				}
+				m.Containers[containerId] = cont
 				m.logger().Infof("loaded container %s", containerId)
 			}
 		}
@@ -174,27 +185,29 @@ func (m *Machine) listenForEvents() (err error) {
 		),
 	})
 	go func() {
+	statusStream:
 		for {
 			select {
-			case event := <-msg:
-				name := event.Actor.Attributes["name"]
+			case entry := <-msg:
+				name := entry.Actor.Attributes["name"]
 				if !strings.HasPrefix(name, "sb-") {
 					continue
 				}
 				containerId := name[3:]
 				localContainer, ok := m.Containers[containerId]
 				if !ok {
-					m.logger().Info("ignored non-serverbench container event: ", event)
+					m.logger().Info("ignored non-serverbench container entry: ", entry)
 					continue
 				}
-				err := localContainer.Handler.HandleEvent(listener.Status, string(event.Action))
+				err := localContainer.Handler.HandleEvent(event.Status, string(entry.Action))
 				if err != nil {
-					m.logger().Warn("error while handling event: ", err)
+					m.logger().Warn("error while handling entry: ", err)
 					continue
 				}
 			case err := <-errs:
-				m.logger().Error("event listener got an error: ", err)
+				m.logger().Error("entry listener got an error: ", err)
 				time.Sleep(1 * time.Second)
+				break statusStream
 			}
 		}
 		m.listenForEvents()
@@ -247,10 +260,21 @@ func (m *Machine) getLoginString() (params url.Values, err error) {
 	if err != nil {
 		return nil, err
 	}
+	containerIds := make([]string, len(m.Containers))
+	i := 0
+	for containerId, _ := range m.Containers {
+		containerIds[i] = containerId
+		i++
+	}
+	serializedContainers, err := json.Marshal(containerIds)
+	if err != nil {
+		return nil, err
+	}
 	params = url.Values{}
 	params.Set("token", *token)
 	params.Set("hostname", hostname)
-	params.Set("inets", string(serializedInets)) // should escape URL formatting
+	params.Set("inets", string(serializedInets))
+	params.Set("containers", string(serializedContainers))
 	return params, err
 }
 
