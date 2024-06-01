@@ -79,7 +79,7 @@ func (m *Machine) handleMessage(message proto.Message) (reply *proto.Response, e
 			switch message.Command {
 			case "host":
 				{
-					err = target.Host(m.cli, m.Containers)
+					err = target.Host(m.cli, m.Containers, nil)
 					break
 				}
 			case "delete":
