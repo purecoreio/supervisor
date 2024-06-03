@@ -55,23 +55,23 @@ func (m *Machine) handleMessage(message proto.Message) (reply *proto.Response, e
 	case "container":
 		{
 			target, ok := m.Containers[*message.Target]
-			if !ok {
-				if message.Command == "host" {
-					target = container.Container{
-						Id: *message.Target,
-					}
-					err = json.Unmarshal([]byte(*message.Data), &target)
-					if err != nil && target.Id != *message.Target {
-						err = errors.New("target mismatch (while creating new container)")
-					} else {
-						err := target.Init(&m.events, m.cli)
-						if err != nil {
-							return nil, err
-						}
-					}
-				} else {
-					err = errors.New("you must provide a hosted container id (unless you are hosting a new container)")
+			if message.Command == "host" {
+				target = container.Container{
+					Id: *message.Target,
 				}
+				hostRequest := proto.HostRequest{}
+				err = json.Unmarshal([]byte(*message.Data), &hostRequest)
+				if err != nil && hostRequest.Container.Id != *message.Target {
+					err = errors.New("target mismatch (while creating new container)")
+				} else {
+					target = hostRequest.Container
+					err := target.Init(&m.events, m.cli)
+					if err != nil {
+						return nil, err
+					}
+				}
+			} else if !ok {
+				err = errors.New("you must provide a hosted container id (unless you are hosting a new container)")
 			}
 			if err != nil {
 				return nil, err
@@ -79,7 +79,9 @@ func (m *Machine) handleMessage(message proto.Message) (reply *proto.Response, e
 			switch message.Command {
 			case "host":
 				{
-					err = target.Host(m.cli, m.Containers, nil)
+					hostRequest := proto.HostRequest{}
+					err = json.Unmarshal([]byte(*message.Data), &hostRequest)
+					err = target.Host(m.cli, m.Containers, hostRequest.Token)
 					break
 				}
 			case "delete":

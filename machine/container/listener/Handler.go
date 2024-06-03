@@ -26,6 +26,8 @@ type Handler struct {
 	LogStream *stream.Stream
 	// load
 	LoadStream *stream.Stream
+	// activity map
+	ProgressCache map[string]event.ProgressUpdate
 }
 
 var (
@@ -103,6 +105,16 @@ func (h *Handler) Subscribe(listener Subscriber) (err error) {
 	}
 	if listener.Level.Progress {
 		h.Progress = append(h.Progress, listener)
+		for _, ongoingProgress := range h.ProgressCache {
+			encodedProgressUpdate, err := ongoingProgress.Encode()
+			if err != nil {
+				return err
+			}
+			err = h.HandleEvent(event.Progress, encodedProgressUpdate)
+			if err != nil {
+				return err
+			}
+		}
 	}
 	if listener.Level.Logs {
 		if !listener.Level.Status {
@@ -192,16 +204,28 @@ func (h *Handler) HandleEvent(action event.Type, content string) (err error) {
 			Container: h.ContainerId,
 			Content:   content,
 		}
-		if entry.Type == event.Status && entry.Content == "start" {
-			if len(h.Logs) > 0 {
-				go func() {
-					_ = h.LogStream.StreamLogs()
-				}()
+		if entry.Type == event.Status {
+			inspect, err := h.Client.ContainerInspect(context.Background(), h.ContainerName)
+			if err != nil {
+				return err
 			}
-			if len(h.Load) > 0 {
-				go func() {
-					_ = h.LoadStream.StreamLoad()
-				}()
+			status := event.StatusUpdate{}
+			encodedStatus, err := status.FromContainerState(inspect.State).Encode()
+			if err != nil {
+				return err
+			}
+			entry.Content = encodedStatus
+			if status.Running {
+				if len(h.Logs) > 0 {
+					go func() {
+						_ = h.LogStream.StreamLogs()
+					}()
+				}
+				if len(h.Load) > 0 {
+					go func() {
+						_ = h.LoadStream.StreamLoad()
+					}()
+				}
 			}
 		}
 		*h.eventPool <- entry

@@ -13,21 +13,23 @@ import (
 	"os"
 	"os/exec"
 	"path"
-	"strings"
 	"supervisor/machine/container/listener"
+	"supervisor/machine/container/listener/activity"
 	"supervisor/machine/container/listener/event"
 )
 
 type Container struct {
-	Id       string            `json:"id"`
-	Template HostingTemplate   `json:"template"`
-	Ports    map[int]int       `json:"ports"`
-	Envs     map[string]string `json:"envs"`
-	Path     string            `json:"path"`
-	Ip       Ip                `json:"ip"`
-	Memory   int               `json:"memory"`
-	Storage  *int              `json:"storage"`
-	Handler  *listener.Handler
+	Id         string            `json:"id"`
+	Template   HostingTemplate   `json:"template"`
+	Ports      map[int]int       `json:"ports"`
+	Envs       map[string]string `json:"envs"`
+	Path       string            `json:"path"`
+	Ip         Ip                `json:"ip"`
+	Memory     int               `json:"memory"`
+	Storage    *int              `json:"storage"`
+	Repository *Repository       `json:"repository,omitempty"`
+	Branch     *string           `json:"branch,omitempty"`
+	Handler    *listener.Handler
 }
 
 var (
@@ -47,6 +49,7 @@ func (c *Container) Init(out *chan event.Entry, cli *client.Client) (err error) 
 		ContainerId:   c.Id,
 		ContainerName: c.Username(),
 		Client:        cli,
+		ProgressCache: make(map[string]event.ProgressUpdate),
 	}
 	err = handler.Forward(out)
 	if err == nil {
@@ -57,16 +60,15 @@ func (c *Container) Init(out *chan event.Entry, cli *client.Client) (err error) 
 
 func (c *Container) isGitRepository() (isRepo bool, err error) {
 	dataPath := path.Join(c.Path, "data")
-	cmd := exec.Command("git", "-C", dataPath, "rev-parse", "--is-inside-work-tree")
-	output, err := cmd.Output()
+	gitDir := path.Join(dataPath, ".git")
+	info, err := os.Stat(gitDir)
 	if err != nil {
-		if strings.Contains(err.Error(), "not a git repository") {
+		if os.IsNotExist(err) {
 			return false, nil
 		}
 		return false, err
 	}
-
-	return strings.TrimSpace(string(output)) == "true", nil
+	return info.IsDir(), nil
 }
 
 func (c *Container) getState(cli *client.Client) (state *types.ContainerState, err error) {
@@ -94,48 +96,76 @@ func (c *Container) Stop(cli *client.Client) (err error) {
 	return err
 }
 
-func (c *Container) Pull(cli *client.Client, repositoryCredentials *RepositoryCredentials) (err error) {
-	// check username and token
-	err = repositoryCredentials.CheckToken()
-	if err != nil {
+func (c *Container) Pull(cli *client.Client, token *string) (err error) {
+	c.logger().Info("pulling repository")
+	if c.Branch == nil {
+		c.logger().Error("missing repository branch")
+		err = errors.New("pull needs a branch")
 		return err
 	}
-	err = repositoryCredentials.CheckUsername()
+	if c.Repository == nil {
+		c.logger().Error("missing repository uri")
+		err = errors.New("pull needs a repository")
+		return err
+	}
+	if token == nil {
+		c.logger().Error("missing repository token")
+		err = errors.New("pull needs a token")
+		return err
+	}
+	// check username and token
+	err = c.Repository.CheckToken(*token)
 	if err != nil {
+		c.logger().Error("invalid repository token")
 		return err
 	}
 	// check if git repo is initialized
 	isRepo, err := c.isGitRepository()
 	if err != nil {
+		c.logger().Error("error while checking if project is within a git repository: ", err)
 		return err
 	}
 	// check state is valid for pull
 	state, err := c.getState(cli)
 	if err != nil {
+		c.logger().Error("error while checking if state is valid for pull: ", err)
 		return err
 	}
 	shouldRestart := false
 	if state.Paused {
+		c.logger().Error("unable tu pull while frozen")
 		err = errors.New("unable to perform pull while the container is frozen")
 		return err
 	} else if state.Running {
+		c.logger().Info("stopping container in preparation for pull - container will be restarted when finished")
 		shouldRestart = true
 		err = c.Stop(cli)
 		if err != nil {
 			return err
 		}
 	}
-	gitUrl := "https://" + repositoryCredentials.Username + ":" + repositoryCredentials.Token + "@" + repositoryCredentials.Repository.Uri
+	gitUrl := "https://x-access-token:" + *token + "@github.com/" + c.Repository.Uri
 	isUpdated := false
 	dataPath := path.Join(c.Path, "data")
 	// if the repo is not initialized, we will first pull aside the data, perform a clone, and move data back
 	if !isRepo {
+		c.logger().Info("the container is not on a github repository, initializing")
 		temporaryId, err := c.pullAside()
 		if err != nil {
 			return err
 		}
-		err = exec.Command("git", "-C", dataPath, "clone", "-b", repositoryCredentials.Repository.Branch, gitUrl).Run()
+		c.logger().Info("initializing container")
+		cloneActivity := activity.Activity{
+			Command:          exec.Command("git", "-C", dataPath, "clone", "--progress", "-b", *c.Branch, gitUrl, "."),
+			Description:      "clone " + c.Repository.Uri,
+			ProgressRegex:    activity.GenericPercentRegex,
+			ProgressIndex:    1,
+			DescriptionRegex: activity.GenericDescriptionColonRegex,
+			DescriptionIndex: 1,
+		}
+		err = cloneActivity.Exec(c.Handler)
 		if err != nil {
+			c.logger().Error("error while initializing: ", err)
 			_ = c.bringTogether(temporaryId)
 			return err
 		}
@@ -146,38 +176,64 @@ func (c *Container) Pull(cli *client.Client, repositoryCredentials *RepositoryCr
 		isUpdated = true
 	}
 	// clean repo
-	err = exec.Command("git", "-C", dataPath, "reset", "--hard").Run()
+	c.logger().Info("whitelisting repo")
+	err = exec.Command("git", "config", "--global", "--add", "safe.directory", dataPath).Run()
 	if err != nil {
+		c.logger().Error("error while whitelisting repo")
 		return err
 	}
+	c.logger().Info("resetting repo")
+	err = exec.Command("git", "-C", dataPath, "reset", "--hard").Run()
+	if err != nil {
+		c.logger().Error("error resetting repo: ", err)
+		return err
+	}
+	c.logger().Info("cleaning up repo")
 	err = exec.Command("git", "-C", dataPath, "clean", "-dff").Run()
 	if err != nil {
+		c.logger().Error("error cleaning up repo: ", err)
 		return err
 	}
 	if !isUpdated {
 		// update remote url (token)
+		c.logger().Info("updating remote")
 		err = exec.Command("git", "-C", dataPath, "remote", "set-url", "origin", gitUrl).Run()
 		if err != nil {
+			c.logger().Error("error while updating remote")
 			return err
 		}
 		// ensure correct branch
-		err = exec.Command("git", "-C", dataPath, "checkout", repositoryCredentials.Repository.Branch).Run()
+		c.logger().Info("checking out branch")
+		err = exec.Command("git", "-C", dataPath, "checkout", *c.Branch).Run()
 		if err != nil {
+			c.logger().Error("error while checking out branch: ", err)
 			return err
 		}
 		// pull changes
-		err = exec.Command("git", "-C", dataPath, "pull", "--rebase").Run()
+		c.logger().Info("pulling changes")
+		pullActivity := activity.Activity{
+			Command:          exec.Command("git", "-C", dataPath, "pull", "--progress", "--rebase"),
+			Description:      "pulling " + c.Repository.Uri,
+			ProgressRegex:    activity.GenericPercentRegex,
+			ProgressIndex:    1,
+			DescriptionRegex: activity.GenericDescriptionColonRegex,
+			DescriptionIndex: 1,
+		}
+		err = pullActivity.Exec(c.Handler)
 		if err != nil {
+			c.logger().Info("error while pulling changes: ", err)
 			return err
 		}
 	}
 	if shouldRestart {
+		c.logger().Info("restarting the container to match the initial state before pull")
 		err = c.Start(cli, nil)
 	}
 	return err
 }
 
 func (c *Container) pullAside() (temporaryId string, err error) {
+	c.logger().Info("pulling aside")
 	temporaryId = randstr.Hex(8)
 	targetPath := path.Join(c.Path, "data-"+temporaryId)
 	err = os.MkdirAll(targetPath, os.ModePerm)
@@ -185,9 +241,9 @@ func (c *Container) pullAside() (temporaryId string, err error) {
 		return "", err
 	}
 	originPath := path.Join(c.Path, "data")
-	originData := path.Join(originPath, "*")
-	err = exec.Command("mv", originData, targetPath).Run()
+	r, err := exec.Command("rsync", "-a", "--remove-source-files", c.appendSlash(originPath), targetPath).Output()
 	if err != nil {
+		c.logger().Error("error while pulling aside, trying to bring together: ", string(r), ", ", err)
 		_ = c.bringTogether(temporaryId)
 		return "", err
 	}
@@ -195,19 +251,29 @@ func (c *Container) pullAside() (temporaryId string, err error) {
 }
 
 func (c *Container) bringTogether(temporaryId string) (err error) {
+	c.logger().Info("bringing together aside")
 	temporaryDirectory := path.Join(c.Path, "data-"+temporaryId)
-	temporaryData := path.Join(temporaryDirectory, "*")
 	originPath := path.Join(c.Path, "data")
-	err = exec.Command("mv", "-n", temporaryData, originPath).Run()
+	r, err := exec.Command("rsync", "-a", "--remove-source-files", "--ignore-existing", c.appendSlash(temporaryDirectory), originPath).Output()
 	if err != nil {
+		c.logger().Error("error while bringing together: ", string(r), ", ", err)
 		return err
 	}
 	// cleanup
 	err = os.Remove(temporaryDirectory)
+	if err != nil {
+		c.logger().Error("error while cleaning after bringing together")
+	}
 	return err
 }
 
-func (c *Container) Host(cli *client.Client, containers map[string]Container, repositoryCredentials *RepositoryCredentials) (err error) {
+func (c *Container) appendSlash(str string) string {
+	runes := []rune(str)
+	runes = append(runes, os.PathSeparator)
+	return string(runes)
+}
+
+func (c *Container) Host(cli *client.Client, containers map[string]Container, token *string) (err error) {
 	c.logger().Info("hosting")
 	_, err = c.createUser()
 	if err != nil {
@@ -217,7 +283,7 @@ func (c *Container) Host(cli *client.Client, containers map[string]Container, re
 
 	// container should mount volume onto settings.path/data
 	go func() {
-		_ = c.Start(cli, repositoryCredentials)
+		_ = c.Start(cli, token)
 	}()
 	c.logger().Info("hosted " + c.Id)
 	return nil
@@ -269,7 +335,7 @@ func (c *Container) containerExists(cli *client.Client) (exists bool, err error)
 	return false, nil
 }
 
-func (c *Container) Start(cli *client.Client, repositoryCredentials *RepositoryCredentials) (err error) {
+func (c *Container) Start(cli *client.Client, token *string) (err error) {
 	ctx := context.Background()
 	exists, err := c.containerExists(cli)
 	if err != nil {
@@ -295,7 +361,7 @@ func (c *Container) Start(cli *client.Client, repositoryCredentials *RepositoryC
 	}
 	config := &container.Config{
 		Image:     "itzg/minecraft-server",
-		Env:       []string{"EULA=true"},
+		Env:       []string{"EULA=true", "TYPE=paper"},
 		Tty:       true,
 		OpenStdin: true,
 	}
@@ -314,8 +380,8 @@ func (c *Container) Start(cli *client.Client, repositoryCredentials *RepositoryC
 		c.logger().Error("unable to create container: " + err.Error())
 		return err
 	}
-	if repositoryCredentials != nil {
-		err = c.Pull(cli, repositoryCredentials)
+	if token != nil {
+		err = c.Pull(cli, token)
 		if err != nil {
 			return err
 		}
