@@ -13,6 +13,8 @@ import (
 	"os"
 	"os/exec"
 	"path"
+	"strconv"
+	"strings"
 	"supervisor/machine/container/listener"
 	"supervisor/machine/container/listener/activity"
 	"supervisor/machine/container/listener/event"
@@ -268,9 +270,52 @@ func (c *Container) bringTogether(temporaryId string) (err error) {
 }
 
 func (c *Container) appendSlash(str string) string {
-	runes := []rune(str)
-	runes = append(runes, os.PathSeparator)
-	return string(runes)
+	if len(str) == 0 || str[len(str)-1] != os.PathSeparator {
+		return str + string(os.PathSeparator)
+	}
+	return str
+}
+
+func (c *Container) Transfer(out bool, externalAddress string, externalPort int, externalDirectory string, externalUser string, mirror bool, externalPassword *string) (err error) {
+	var commands []string
+	sshArgs := []string{"ssh", "-p", strconv.Itoa(externalPort)}
+	if externalPassword != nil {
+		commands = append(commands, "sshpass", "-p", strconv.Quote(*externalPassword))
+	} else {
+		sshArgs = append(sshArgs, "-i", c.getPrivateKeyFile())
+	}
+	commands = append(commands, "rsync", "-e", strconv.Quote(strings.Join(sshArgs, " ")), "-az", "--no-inc-recursive", "--info=progress2", "--update")
+	if mirror {
+		commands = append(commands, "--delete")
+	}
+	externalSnippet := externalUser + "@" + externalAddress + ":" + externalDirectory
+	localSnippet := path.Join(c.Path, "data")
+	var from string
+	var to string
+	var description string
+	if out {
+		from = localSnippet
+		to = externalSnippet
+		description = "transfering to " + externalSnippet
+	} else {
+		from = externalSnippet
+		to = localSnippet
+		description = "transfering from " + externalSnippet
+	}
+	commands = append(commands, strconv.Quote(c.appendSlash(from)), strconv.Quote(to))
+	transferActivity := activity.Activity{
+		Command:          exec.Command(commands[0], commands[1:]...),
+		Description:      description,
+		DescriptionIndex: 0,
+		DescriptionRegex: nil,
+		ProgressIndex:    1,
+		ProgressRegex:    activity.GenericPercentRegex,
+	}
+	err = transferActivity.Exec(c.Handler)
+	if err != nil {
+		return err
+	}
+	return nil
 }
 
 func (c *Container) Host(cli *client.Client, containers map[string]Container, token *string) (err error) {
