@@ -174,10 +174,12 @@ func (m *Machine) handleMessage(message in.Message) (reply *out.Response, err er
 			// power
 			case "start":
 				{
+					err = target.Start(m.cli, nil)
 					break
 				}
 			case "stop":
 				{
+					err = target.Stop(m.cli)
 					break
 				}
 			case "restart":
