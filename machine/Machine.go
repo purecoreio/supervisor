@@ -19,7 +19,8 @@ import (
 	"strings"
 	"supervisor/machine/container"
 	"supervisor/machine/container/listener/event"
-	"supervisor/machine/proto"
+	"supervisor/machine/proto/in"
+	"supervisor/machine/proto/out"
 	"sync"
 	"time"
 )
@@ -95,21 +96,21 @@ func (m *Machine) Init(try int) (err error) {
 		}
 	}()
 	for {
-		_, in, err := m.conn.ReadMessage()
+		_, inBytes, err := m.conn.ReadMessage()
 		if err != nil {
 			m.logger().Error("unable to read message (socket likely closed)", err)
 			break
 		}
-		message := proto.Message{}
-		err = json.Unmarshal(bytes.TrimSpace(bytes.Replace(in, newline, space, -1)), &message)
+		message := in.Message{}
+		err = json.Unmarshal(bytes.TrimSpace(bytes.Replace(inBytes, newline, space, -1)), &message)
 		if err != nil {
-			m.logger().Warn("malformed message received ("+string(in)+")", err.Error())
+			m.logger().Warn("malformed message received ("+string(inBytes)+")", err.Error())
 			continue
 		}
 		m.logger().Info("received request: %v", message)
 		reply, err := m.handleMessage(message)
 		m.outMutex.Lock()
-		err = m.conn.WriteJSON(proto.Response{
+		err = m.conn.WriteJSON(out.Response{
 			Rid:   message.Rid,
 			Type:  "ack",
 			Error: err != nil,

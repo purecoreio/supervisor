@@ -1,4 +1,4 @@
-package proto
+package out
 
 type Inet struct {
 	Name string   `json:"name"`

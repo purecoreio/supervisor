@@ -1,4 +1,4 @@
-package proto
+package in
 
 type Message struct {
 	Rid     string  `json:"rid"`

@@ -1,4 +1,4 @@
-package proto
+package out
 
 type Response struct {
 	Rid   string      `json:"rid"`
