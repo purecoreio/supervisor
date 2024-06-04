@@ -5,10 +5,11 @@ import (
 	"errors"
 	"supervisor/machine/container"
 	"supervisor/machine/container/listener"
-	"supervisor/machine/proto"
+	"supervisor/machine/proto/in"
+	"supervisor/machine/proto/out"
 )
 
-func (m *Machine) handleMessage(message proto.Message) (reply *proto.Response, err error) {
+func (m *Machine) handleMessage(message in.Message) (reply *out.Response, err error) {
 	switch message.Realm {
 	case "machine":
 		{
@@ -59,7 +60,7 @@ func (m *Machine) handleMessage(message proto.Message) (reply *proto.Response, e
 				target = container.Container{
 					Id: *message.Target,
 				}
-				hostRequest := proto.HostRequest{}
+				hostRequest := in.HostRequest{}
 				err = json.Unmarshal([]byte(*message.Data), &hostRequest)
 				if err != nil && hostRequest.Container.Id != *message.Target {
 					err = errors.New("target mismatch (while creating new container)")
@@ -79,7 +80,7 @@ func (m *Machine) handleMessage(message proto.Message) (reply *proto.Response, e
 			switch message.Command {
 			case "host":
 				{
-					hostRequest := proto.HostRequest{}
+					hostRequest := in.HostRequest{}
 					err = json.Unmarshal([]byte(*message.Data), &hostRequest)
 					err = target.Host(m.cli, m.Containers, hostRequest.Token)
 					break
@@ -93,13 +94,81 @@ func (m *Machine) handleMessage(message proto.Message) (reply *proto.Response, e
 				{
 					pswd, err := target.ResetPassword()
 					if err == nil {
-						reply = &proto.Response{
+						reply = &out.Response{
 							Rid:   message.Rid,
 							Type:  "password",
 							Data:  *pswd,
 							Error: false,
 						}
 					}
+					break
+				}
+			case "reset_key":
+				{
+					key, err := target.ResetKeys()
+					if err == nil {
+						reply = &out.Response{
+							Rid:  message.Rid,
+							Type: "key",
+							Data: out.PublicKeyResponse{
+								Key: key,
+							},
+							Error: false,
+						}
+					}
+					break
+				}
+			case "public_key":
+				{
+					key, err := target.GetPublicKey()
+					if err == nil {
+						reply = &out.Response{
+							Rid:  message.Rid,
+							Type: "key",
+							Data: out.PublicKeyResponse{
+								Key: key,
+							},
+							Error: false,
+						}
+					}
+					break
+				}
+			case "list_authorized_keys":
+				{
+					keys, err := target.ListAuthorizedKeys()
+					if err == nil {
+						reply = &out.Response{
+							Rid:  message.Rid,
+							Type: "authorized_keys",
+							Data: out.KeyListResponse{
+								Keys: keys,
+							},
+							Error: false,
+						}
+					}
+					break
+				}
+			case "authorize_key":
+				{
+					keyRequest := in.KeyRequest{}
+					err = json.Unmarshal([]byte(*message.Data), &keyRequest)
+					err = target.AddAuthorizedKey(keyRequest.Key)
+					break
+				}
+			case "deauthorize_key":
+				{
+					keyRequest := in.KeyRequest{}
+					err = json.Unmarshal([]byte(*message.Data), &keyRequest)
+					err = target.RemoveAuthorizedKey(keyRequest.Key)
+					break
+				}
+			case "transfer":
+				{
+					transferRequest := in.TransferRequest{}
+					err = json.Unmarshal([]byte(*message.Data), &transferRequest)
+					go func() {
+						_ = target.Transfer(transferRequest.Out, transferRequest.Address, transferRequest.Port, transferRequest.Path, transferRequest.User, transferRequest.Mirror, transferRequest.Password)
+					}()
 					break
 				}
 			// power

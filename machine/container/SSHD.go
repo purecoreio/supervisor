@@ -3,10 +3,15 @@ package container
 import (
 	"bufio"
 	"errors"
+	"fmt"
 	"github.com/sethvargo/go-password/password"
 	"os"
 	"os/exec"
+	"os/user"
+	"path"
 	"path/filepath"
+	"regexp"
+	"strconv"
 	"strings"
 )
 
@@ -183,6 +188,182 @@ func (c *Container) ResetPassword() (pswd *string, err error) {
 	return pswd, nil
 }
 
+func (c *Container) ResetKeys() (publicKey string, err error) {
+	c.logger().Info("resetting keys")
+	usr, err := user.Lookup(c.Username())
+	if err != nil {
+		c.logger().Error("error while looking up user")
+		return publicKey, err
+	}
+
+	sshDir := filepath.Join(usr.HomeDir, ".ssh")
+
+	// Create the .ssh directory
+	err = os.MkdirAll(sshDir, 0700)
+	if err != nil {
+		c.logger().Error("error while creating ssh directory")
+		return publicKey, err
+	}
+
+	// Define the authorized_keys file path
+	authKeysFile := filepath.Join(sshDir, "authorized_keys")
+
+	// Create the authorized_keys file if it doesn't exist
+	_, err = os.OpenFile(authKeysFile, os.O_RDONLY|os.O_CREATE, 0600)
+	if err != nil {
+		c.logger().Error("error while creating authorized_keys file")
+		return publicKey, err
+	}
+
+	// Change the ownership of the .ssh directory and its contents
+	uid := usr.Uid
+	gid := usr.Gid
+	uidInt, err := strconv.Atoi(uid)
+	if err != nil {
+		c.logger().Error("error while converting uid to int")
+		return publicKey, err
+	}
+	gidInt, err := strconv.Atoi(gid)
+	if err != nil {
+		c.logger().Error("error while converting gid to int")
+		return publicKey, err
+	}
+
+	err = os.Chown(sshDir, uidInt, gidInt)
+	if err != nil {
+		c.logger().Error("error while chowning authorized_keys")
+		return publicKey, err
+	}
+
+	err = exec.Command("sh", "-c", `yes y | ssh-keygen -t ed25519 -C "<id>" -f `+path.Join(sshDir, "id_ed25519")+` -N ""`).Run()
+	if err != nil {
+		c.logger().Error("error while creating ssh key")
+		return publicKey, err
+	}
+	err = os.Chown(authKeysFile, uidInt, gidInt)
+	if err != nil {
+		c.logger().Error("error while chowning authorized_keys")
+		return publicKey, err
+	}
+	c.logger().Info("reset keys")
+	return c.GetPublicKey()
+}
+
+func (c *Container) GetPublicKey() (publicKey string, err error) {
+	c.logger().Info("reading public key")
+	pubKeyBytes, err := os.ReadFile(path.Join(directory, c.Username(), ".ssh", "id_ed25519"))
+	if err != nil {
+		c.logger().Error("error while looking up public key")
+		return "", err
+	}
+	c.logger().Info("read key")
+	return string(pubKeyBytes), nil
+}
+
+func (c *Container) AddAuthorizedKey(authorizedKey string) (err error) {
+	c.logger().Info("adding authorized key")
+	err = c.checkKey(authorizedKey)
+	if err != nil {
+		return err
+	}
+	authKeysFile := c.getAuthorizedKeysFile()
+	existingKeys, err := c.ListAuthorizedKeys()
+	if err != nil {
+		return err
+	}
+	for _, key := range existingKeys {
+		if key == authorizedKey {
+			// key already exists, ignore
+			return nil
+		}
+	}
+	file, err := os.OpenFile(authKeysFile, os.O_APPEND|os.O_WRONLY, 0600)
+	if err != nil {
+		return fmt.Errorf("failed to open authorized_keys file: %w", err)
+	}
+	defer file.Close()
+
+	_, err = file.WriteString(authorizedKey + "\n")
+	if err != nil {
+		return fmt.Errorf("failed to write to authorized_keys file: %w", err)
+	}
+	c.logger().Info("added authorized key")
+	return nil
+}
+
+func (c *Container) RemoveAuthorizedKey(authorizedKey string) (err error) {
+	c.logger().Info("removing authorized key")
+	err = c.checkKey(authorizedKey)
+	if err != nil {
+		return err
+	}
+	authKeysFile := c.getAuthorizedKeysFile()
+	existingKeys, err := c.ListAuthorizedKeys()
+	if err != nil {
+		return err
+	}
+	found := false
+	var output []string
+	for _, key := range existingKeys {
+		if key != authorizedKey {
+			output = append(output, key)
+		} else {
+			found = true
+		}
+	}
+	if !found {
+		err = errors.New("authorized key not found")
+	}
+	err = os.WriteFile(authKeysFile, []byte(strings.Join(output, "\n")), 0600)
+	if err != nil {
+		return fmt.Errorf("failed to write to authorized_keys file: %w", err)
+	}
+	c.logger().Info("removed authorized key")
+	return nil
+}
+
+func (c *Container) ListAuthorizedKeys() (authorizedKeys []string, err error) {
+	authKeysFile := c.getAuthorizedKeysFile()
+	file, err := os.Open(authKeysFile)
+	if err != nil {
+		return nil, fmt.Errorf("failed to open authorized_keys file: %w", err)
+	}
+	defer file.Close()
+
+	var keys []string
+	scanner := bufio.NewScanner(file)
+	for scanner.Scan() {
+		keys = append(keys, scanner.Text())
+	}
+
+	if err := scanner.Err(); err != nil {
+		return nil, fmt.Errorf("error reading authorized_keys file: %w", err)
+	}
+
+	return keys, nil
+}
+
+func (c *Container) getAuthorizedKeysFile() string {
+	return path.Join(directory, c.Username(), ".ssh", "authorized_keys")
+}
+
+func (c *Container) getPrivateKeyFile() string {
+	return path.Join(directory, c.Username(), ".ssh", "id_ed25519")
+}
+
+func (c *Container) checkKey(key string) (err error) {
+	if len(key) > 8192 {
+		err = errors.New("key too long")
+		return err
+	}
+	sshKeyRegex := regexp.MustCompile(`^ssh-(rsa|ed25519|dsa|ecdsa)\s+[A-Za-z0-9+/]+[=]{0,2}\s*[^\s@]+(?:@\S+)?$`)
+	matches := sshKeyRegex.MatchString(key)
+	if matches == false {
+		err = errors.New("invalid key")
+	}
+	return err
+}
+
 func (c *Container) createUser() (pswd *string, err error) {
 	username := c.Username()
 	c.logger().Info("creating user " + username + " (" + c.Path + ")")
@@ -220,6 +401,11 @@ func (c *Container) createUser() (pswd *string, err error) {
 	}
 
 	resetPassword, err := c.ResetPassword()
+	if err != nil {
+		return nil, err
+	}
+
+	_, err = c.ResetKeys()
 	if err != nil {
 		return nil, err
 	}
