@@ -98,7 +98,7 @@ func (c *Container) Stop(cli *client.Client) (err error) {
 	return err
 }
 
-func (c *Container) Pull(cli *client.Client, token *string) (err error) {
+func (c *Container) Pull(cli *client.Client, token *string, headSha *string) (err error) {
 	c.logger().Info("pulling repository")
 	if c.Branch == nil {
 		c.logger().Error("missing repository branch")
@@ -164,6 +164,8 @@ func (c *Container) Pull(cli *client.Client, token *string) (err error) {
 			ProgressIndex:    1,
 			DescriptionRegex: activity.GenericDescriptionColonRegex,
 			DescriptionIndex: 1,
+			HeadSha:          headSha,
+			Type:             "git",
 		}
 		err = cloneActivity.Exec(c.Handler)
 		if err != nil {
@@ -220,6 +222,8 @@ func (c *Container) Pull(cli *client.Client, token *string) (err error) {
 			ProgressIndex:    1,
 			DescriptionRegex: activity.GenericDescriptionColonRegex,
 			DescriptionIndex: 1,
+			HeadSha:          headSha,
+			Type:             "git",
 		}
 		err = pullActivity.Exec(c.Handler)
 		if err != nil {
@@ -229,7 +233,7 @@ func (c *Container) Pull(cli *client.Client, token *string) (err error) {
 	}
 	if shouldRestart {
 		c.logger().Info("restarting the container to match the initial state before pull")
-		err = c.Start(cli, nil)
+		err = c.Start(cli, nil, nil)
 	}
 	return err
 }
@@ -276,16 +280,20 @@ func (c *Container) appendSlash(str string) string {
 	return str
 }
 
-func (c *Container) Transfer(out bool, externalAddress string, externalPort int, externalDirectory string, externalUser string, mirror bool, externalPassword *string) (err error) {
+func (c *Container) Transfer(out bool, externalAddress string, externalPort int, externalDirectory string, externalUser string, mirror bool, externalPassword *string, headSha *string) (err error) {
+	c.logger().Info("starting transfer")
 	var commands []string
-	sshArgs := []string{"ssh", "-p", strconv.Itoa(externalPort)}
+	sshArgs := []string{"ssh", "-o", "StrictHostKeyChecking=no", "-p", strconv.Itoa(externalPort)}
 	if externalPassword != nil {
+		c.logger().Info("transfer uses password")
 		commands = append(commands, "sshpass", "-p", strconv.Quote(*externalPassword))
 	} else {
+		c.logger().Info("transfer uses ssh keys")
 		sshArgs = append(sshArgs, "-i", c.getPrivateKeyFile())
 	}
 	commands = append(commands, "rsync", "-e", strconv.Quote(strings.Join(sshArgs, " ")), "-az", "--no-inc-recursive", "--info=progress2", "--update")
 	if mirror {
+		c.logger().Info("transfer mirrors data")
 		commands = append(commands, "--delete")
 	}
 	externalSnippet := externalUser + "@" + externalAddress + ":" + externalDirectory
@@ -294,41 +302,52 @@ func (c *Container) Transfer(out bool, externalAddress string, externalPort int,
 	var to string
 	var description string
 	if out {
+		c.logger().Info("transfer uploads data")
 		from = localSnippet
 		to = externalSnippet
 		description = "transfering to " + externalSnippet
 	} else {
+		c.logger().Info("transfer downloads data")
 		from = externalSnippet
 		to = localSnippet
 		description = "transfering from " + externalSnippet
 	}
 	commands = append(commands, strconv.Quote(c.appendSlash(from)), strconv.Quote(to))
 	transferActivity := activity.Activity{
-		Command:          exec.Command(commands[0], commands[1:]...),
+		Command:          exec.Command("sh", "-c", strings.Join(commands, " ")),
 		Description:      description,
 		DescriptionIndex: 0,
 		DescriptionRegex: nil,
 		ProgressIndex:    1,
 		ProgressRegex:    activity.GenericPercentRegex,
+		HeadSha:          headSha,
+		Type:             "transfer",
 	}
 	err = transferActivity.Exec(c.Handler)
 	if err != nil {
+		c.logger().Info("error while transferring: ", err)
 		return err
 	}
 	return nil
 }
 
-func (c *Container) Host(cli *client.Client, containers map[string]Container, token *string) (err error) {
+func (c *Container) Host(cli *client.Client, containers map[string]Container, token *string, headSha *string) (err error) {
 	c.logger().Info("hosting")
-	_, err = c.createUser()
+	exists, err := c.userExists()
 	if err != nil {
 		return err
+	}
+	if !exists {
+		_, err = c.createUser()
+		if err != nil {
+			return err
+		}
 	}
 	containers[c.Id] = *c
 
 	// container should mount volume onto settings.path/data
 	go func() {
-		_ = c.Start(cli, token)
+		_ = c.Start(cli, token, headSha)
 	}()
 	c.logger().Info("hosted " + c.Id)
 	return nil
@@ -380,7 +399,7 @@ func (c *Container) containerExists(cli *client.Client) (exists bool, err error)
 	return false, nil
 }
 
-func (c *Container) Start(cli *client.Client, token *string) (err error) {
+func (c *Container) Start(cli *client.Client, token *string, headSha *string) (err error) {
 	ctx := context.Background()
 	exists, err := c.containerExists(cli)
 	if err != nil {
@@ -426,7 +445,7 @@ func (c *Container) Start(cli *client.Client, token *string) (err error) {
 		return err
 	}
 	if token != nil {
-		err = c.Pull(cli, token)
+		err = c.Pull(cli, token, headSha)
 		if err != nil {
 			return err
 		}

@@ -200,7 +200,7 @@ func (m *Machine) listenForEvents() (err error) {
 					m.logger().Info("ignored non-serverbench container entry: ", entry)
 					continue
 				}
-				err := localContainer.Handler.HandleEvent(event.Status, string(entry.Action))
+				err := localContainer.Handler.HandleEvent(event.Status, string(entry.Action), false)
 				if err != nil {
 					m.logger().Warn("error while handling entry: ", err)
 					continue

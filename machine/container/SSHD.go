@@ -364,6 +364,17 @@ func (c *Container) checkKey(key string) (err error) {
 	return err
 }
 
+func (c *Container) userExists() (exists bool, err error) {
+	lookup, err := user.Lookup(c.Username())
+	if err != nil {
+		if errors.Is(err, user.UnknownUserError(c.Username())) {
+			return false, nil
+		}
+		return false, err
+	}
+	return lookup != nil, nil
+}
+
 func (c *Container) createUser() (pswd *string, err error) {
 	username := c.Username()
 	c.logger().Info("creating user " + username + " (" + c.Path + ")")

@@ -68,7 +68,7 @@ func (h *Handler) Forward(Out *chan event.Entry) (err error) {
 	h.LoadStream = &loadStream
 	go func() {
 		for entry := range *h.internalEvents {
-			err = h.HandleEvent(entry.Type, entry.Content)
+			err = h.HandleEvent(entry.Type, entry.Content, false)
 		}
 	}()
 	return err
@@ -98,7 +98,7 @@ func (h *Handler) Subscribe(listener Subscriber) (err error) {
 			return err
 		}
 		status = inspect.State.Status
-		err = h.HandleEvent(event.Status, status)
+		err = h.HandleEvent(event.Status, status, false)
 		if err != nil {
 			return err
 		}
@@ -110,7 +110,7 @@ func (h *Handler) Subscribe(listener Subscriber) (err error) {
 			if err != nil {
 				return err
 			}
-			err = h.HandleEvent(event.Progress, encodedProgressUpdate)
+			err = h.HandleEvent(event.Progress, encodedProgressUpdate, false)
 			if err != nil {
 				return err
 			}
@@ -182,20 +182,27 @@ func (h *Handler) cleanSubscriberList(subscriber Subscriber, subscriberList *[]S
 	return empty, err
 }
 
-func (h *Handler) HandleEvent(action event.Type, content string) (err error) {
+func (h *Handler) HandleEvent(action event.Type, content string, broadcast bool) (err error) {
 	var targetListeners *[]Subscriber = nil
-	if action == event.Log {
-		targetListeners = &h.Logs
-	} else if action == event.Status {
-		targetListeners = &h.Status
-	} else if action == event.Progress {
-		targetListeners = &h.Progress
-	} else if action == event.Load {
-		targetListeners = &h.Load
+	if broadcast {
+		broadcastIds := []Subscriber{{
+			Id: "*",
+		}}
+		targetListeners = &broadcastIds
 	} else {
-		err = errors.New("unknown action")
-		h.logger().Errorf("unknown event %s, %s", action, content)
-		return err
+		if action == event.Log {
+			targetListeners = &h.Logs
+		} else if action == event.Status {
+			targetListeners = &h.Status
+		} else if action == event.Progress {
+			targetListeners = &h.Progress
+		} else if action == event.Load {
+			targetListeners = &h.Load
+		} else {
+			err = errors.New("unknown action")
+			h.logger().Errorf("unknown event %s, %s", action, content)
+			return err
+		}
 	}
 	for _, targetListener := range *targetListeners {
 		entry := event.Entry{

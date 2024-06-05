@@ -8,4 +8,5 @@ type TransferRequest struct {
 	Password *string `json:"password,omitempty"`
 	Mirror   bool    `json:"mirror"`
 	Port     int     `json:"port"`
+	HeadSha  *string `json:"headSha"`
 }

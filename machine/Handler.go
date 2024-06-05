@@ -66,6 +66,7 @@ func (m *Machine) handleMessage(message in.Message) (reply *out.Response, err er
 					err = errors.New("target mismatch (while creating new container)")
 				} else {
 					target = hostRequest.Container
+					// TODO keep handler working between installs
 					err := target.Init(&m.events, m.cli)
 					if err != nil {
 						return nil, err
@@ -82,7 +83,7 @@ func (m *Machine) handleMessage(message in.Message) (reply *out.Response, err er
 				{
 					hostRequest := in.HostRequest{}
 					err = json.Unmarshal([]byte(*message.Data), &hostRequest)
-					err = target.Host(m.cli, m.Containers, hostRequest.Token)
+					err = target.Host(m.cli, m.Containers, hostRequest.Token, hostRequest.HeadSha)
 					break
 				}
 			case "delete":
@@ -95,9 +96,11 @@ func (m *Machine) handleMessage(message in.Message) (reply *out.Response, err er
 					pswd, err := target.ResetPassword()
 					if err == nil {
 						reply = &out.Response{
-							Rid:   message.Rid,
-							Type:  "password",
-							Data:  *pswd,
+							Rid:  message.Rid,
+							Type: "password",
+							Data: out.PasswordResponse{
+								Password: *pswd,
+							},
 							Error: false,
 						}
 					}
@@ -167,14 +170,14 @@ func (m *Machine) handleMessage(message in.Message) (reply *out.Response, err er
 					transferRequest := in.TransferRequest{}
 					err = json.Unmarshal([]byte(*message.Data), &transferRequest)
 					go func() {
-						_ = target.Transfer(transferRequest.Out, transferRequest.Address, transferRequest.Port, transferRequest.Path, transferRequest.User, transferRequest.Mirror, transferRequest.Password)
+						_ = target.Transfer(transferRequest.Out, transferRequest.Address, transferRequest.Port, transferRequest.Path, transferRequest.User, transferRequest.Mirror, transferRequest.Password, nil)
 					}()
 					break
 				}
 			// power
 			case "start":
 				{
-					err = target.Start(m.cli, nil)
+					err = target.Start(m.cli, nil, nil)
 					break
 				}
 			case "stop":

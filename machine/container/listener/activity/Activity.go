@@ -16,6 +16,8 @@ type Activity struct {
 	DescriptionIndex    int
 	ProgressRegex       *regexp.Regexp
 	ProgressIndex       int
+	HeadSha             *string
+	Type                string
 	progress            int
 	originalDescription string
 	id                  string
@@ -25,7 +27,7 @@ func (a *Activity) Exec(handler *listener.Handler) (err error) {
 	a.id = randstr.Hex(8)
 	a.progress = 0
 	a.originalDescription = a.Description
-	a.Forward(handler, false, false)
+	a.Forward(handler, false, false, true)
 
 	stdout, err := a.Command.StdoutPipe()
 	if err != nil {
@@ -57,7 +59,7 @@ func (a *Activity) Exec(handler *listener.Handler) (err error) {
 							}
 						}
 						a.progress = newProgressNumeric
-						a.Forward(handler, false, false)
+						a.Forward(handler, false, false, false)
 					}
 				}
 
@@ -66,31 +68,37 @@ func (a *Activity) Exec(handler *listener.Handler) (err error) {
 	}()
 
 	if err := a.Command.Wait(); err != nil {
-		a.Forward(handler, true, true)
+		a.Forward(handler, true, true, false)
 		return err
 	} else {
 		a.progress = 100
-		a.Forward(handler, true, false)
+		a.Forward(handler, true, false, false)
 	}
 
 	return nil
 
 }
 
-func (a *Activity) Forward(handler *listener.Handler, finished bool, errored bool) {
+func (a *Activity) Forward(handler *listener.Handler, finished bool, errored bool, started bool) {
 	progress := event.ProgressUpdate{
 		Id:          a.id,
 		Description: a.Description,
+		Started:     started,
 		Finished:    finished,
 		Errored:     errored,
 		Progress:    a.progress,
+		HeadSha:     a.HeadSha,
+		Type:        a.Type,
 	}
 	handler.ProgressCache[a.id] = progress
 	enc, err := progress.Encode()
 	if err != nil {
 		return
 	}
-	_ = handler.HandleEvent(event.Progress, enc)
+	_ = handler.HandleEvent(event.Progress, enc, false)
+	if started || finished {
+		_ = handler.HandleEvent(event.Progress, enc, true)
+	}
 	if finished {
 		delete(handler.ProgressCache, a.id)
 	}
