@@ -18,6 +18,7 @@ import (
 	"strconv"
 	"strings"
 	"supervisor/machine/container"
+	ip "supervisor/machine/container/ip"
 	"supervisor/machine/container/listener/event"
 	"supervisor/machine/proto/in"
 	"supervisor/machine/proto/out"
@@ -231,7 +232,7 @@ func (m *Machine) getLoginString() (params url.Values, err error) {
 	}
 
 	// 3. networking
-	var inets []container.Ip // list of non-empty network interfaces
+	var inets []ip.Ip // list of non-empty network interfaces
 	interfaces, err := net.Interfaces()
 	if err != nil {
 		return nil, err
@@ -242,18 +243,29 @@ func (m *Machine) getLoginString() (params url.Values, err error) {
 			return nil, err
 		}
 		for _, inetAddr := range addressList {
-			ip, _, err := net.ParseCIDR(inetAddr.String())
+
+			if inet.Flags&net.FlagPointToPoint != 0 {
+				continue
+			}
+
+			if inet.HardwareAddr == nil {
+				continue
+			}
+
+			parsedIp, _, err := net.ParseCIDR(inetAddr.String())
 			if err != nil {
 				return nil, err
 			}
 
-			if !ip.IsLoopback() {
-				inets = append(inets, container.Ip{
-					Ip:        inetAddr.String(),
-					Adapter:   inet.Name,
-					Available: true,
-				})
+			if parsedIp.IsLoopback() {
+				continue
 			}
+
+			inets = append(inets, ip.Ip{
+				Ip:        inetAddr.String(),
+				Adapter:   inet.Name,
+				Available: true,
+			})
 		}
 	}
 	m.logger().Info("found addresses: " + strconv.Itoa(len(inets)))
