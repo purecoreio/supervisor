@@ -3,11 +3,13 @@ package container
 import (
 	"context"
 	"errors"
+	"fmt"
 	"github.com/docker/docker/api/types"
 	"github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/api/types/image"
 	"github.com/docker/docker/api/types/mount"
 	"github.com/docker/docker/client"
+	"github.com/docker/go-connections/nat"
 	log "github.com/sirupsen/logrus"
 	"github.com/thanhpk/randstr"
 	"os"
@@ -15,6 +17,7 @@ import (
 	"path"
 	"strconv"
 	"strings"
+	"supervisor/machine/container/ip"
 	"supervisor/machine/container/listener"
 	"supervisor/machine/container/listener/activity"
 	"supervisor/machine/container/listener/event"
@@ -23,10 +26,9 @@ import (
 type Container struct {
 	Id         string            `json:"id"`
 	Template   HostingTemplate   `json:"template"`
-	Ports      map[int]int       `json:"ports"`
+	Ports      []ip.Port         `json:"ports"`
 	Envs       map[string]string `json:"envs"`
 	Path       string            `json:"path"`
-	Ip         Ip                `json:"ip"`
 	Memory     int               `json:"memory"`
 	Storage    *int              `json:"storage"`
 	Repository *Repository       `json:"repository,omitempty"`
@@ -423,21 +425,40 @@ func (c *Container) Start(cli *client.Client, token *string, headSha *string) (e
 		c.logger().Error("unable to pull image: " + err.Error())
 		return err
 	}
+	parsedEnvs := make([]string, 0)
+	for k, v := range c.Envs {
+		parsedEnvs = append(parsedEnvs, fmt.Sprintf("%s=%s", k, v))
+	}
 	config := &container.Config{
-		Image:     "itzg/minecraft-server",
-		Env:       []string{"EULA=true", "TYPE=paper"},
+		Image:     c.Template.Image.Uri,
+		Env:       parsedEnvs,
 		Tty:       true,
 		OpenStdin: true,
+	}
+	portBindings := nat.PortMap{}
+	for _, port := range c.Ports {
+		protos := []string{"tcp", "udp"}
+		for _, proto := range protos {
+			dockerPort, err := nat.NewPort(proto, strconv.Itoa(port.Port))
+			if err != nil {
+				return err
+			}
+			portBindings[dockerPort] = []nat.PortBinding{{
+				HostIP:   port.Ip.Ip,
+				HostPort: strconv.Itoa(port.Port),
+			}}
+		}
 	}
 	c.logger().Info(path.Join(c.Path, "data"))
 	hostConfig := &container.HostConfig{
 		Mounts: []mount.Mount{
 			{
 				Type:   mount.TypeBind,
-				Target: "/data",
+				Target: c.Template.Image.DefaultMount,
 				Source: path.Join(c.Path, "data"),
 			},
 		},
+		PortBindings: portBindings,
 	}
 	resp, err := cli.ContainerCreate(ctx, config, hostConfig, nil, nil, c.Username())
 	if err != nil {

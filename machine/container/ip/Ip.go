@@ -1,4 +1,4 @@
-package container
+package ip
 
 type Ip struct {
 	Ip        string `json:"ip"`
