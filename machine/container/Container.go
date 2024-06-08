@@ -347,6 +347,11 @@ func (c *Container) Host(cli *client.Client, containers map[string]Container, to
 	}
 	containers[c.Id] = *c
 
+	err = c.ApplyRules()
+	if err != nil {
+		return err
+	}
+
 	// container should mount volume onto settings.path/data
 	go func() {
 		_ = c.Start(cli, token, headSha)
@@ -358,6 +363,7 @@ func (c *Container) Host(cli *client.Client, containers map[string]Container, to
 func (c *Container) Unhost(cli *client.Client, containers map[string]Container) (err error) {
 	c.logger().Info("unhosting " + c.Id)
 	_ = c.Kill(cli)
+	err = c.deleteChain()
 	err = c.removeUser()
 	if err != nil {
 		return err

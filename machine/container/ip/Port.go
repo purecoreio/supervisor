@@ -16,15 +16,26 @@ const (
 
 type Port struct {
 	Port     int            `json:"port"`
-	Firewall FirewallPolicy `json:"whitelist"`
+	Firewall FirewallPolicy `json:"firewall"`
 	Rules    []Rule         `json:"rules"`
 	Ip       Ip             `json:"ip"`
 }
 
-func (p *Port) CreateRules(usedInterface string, chainName string) (err error) {
+func (p *Port) CreateRules(chainName string) (err error) {
+	if p.Port == 22 {
+		return errors.New("can't modify ssh port")
+	}
 	usedIpParsed := net.ParseIP(p.Ip.Ip)
 	if usedIpParsed == nil {
 		return errors.New("invalid source ip")
+	}
+	var utility string
+	if usedIpParsed.To4() != nil {
+		// IPV4
+		utility = "iptables"
+	} else {
+		// IPV6
+		utility = "ip6tables"
 	}
 	var protos = []string{"tcp", "udp"}
 	var actionInList string
@@ -34,38 +45,31 @@ func (p *Port) CreateRules(usedInterface string, chainName string) (err error) {
 	if p.Firewall == Whitelist {
 		actionInList = accept
 		actionOutsideList = drop
-	} else {
+	} else if p.Firewall == Blacklist {
 		actionInList = drop
 		actionOutsideList = accept
+	} else {
+		err = errors.New("unknown firewall policy")
+		return err
 	}
 	for _, rule := range p.Rules {
 		resolvedIps, err := rule.GetIps()
 		if err == nil {
 			for _, ip := range resolvedIps {
-				var utility string
-				if ip.To4() != nil {
-					// IPV4
-					utility = "iptables"
-				} else {
-					// IPV6
-					utility = "ip6tables"
-				}
 				for _, proto := range protos {
-					exec.Command(utility, "-A", chainName, "-p", usedInterface, "-s", ip.String(), "-d", p.Ip.Ip, "-p", proto, "--dport", strconv.Itoa(p.Port), "-j", actionInList)
+					err = exec.Command(utility, "-A", chainName, "-p", p.Ip.Adapter, "-s", ip.String(), "-d", p.Ip.Ip, "-p", proto, "--dport", strconv.Itoa(p.Port), "-j", actionInList).Run()
+					if err != nil {
+						return err
+					}
 				}
 			}
 		}
 	}
-	var utility string
 	for _, proto := range protos {
-		if usedIpParsed.To4() != nil {
-			// IPV4
-			utility = "iptables"
-		} else {
-			// IPV6
-			utility = "ip6tables"
+		err = exec.Command(utility, "-A", chainName, "-p", p.Ip.Adapter, "-d", p.Ip.Ip, "-p", proto, "--dport", strconv.Itoa(p.Port), "-j", actionOutsideList).Run()
+		if err != nil {
+			return err
 		}
-		exec.Command(utility, "-A", chainName, "-p", usedInterface, "-d", p.Ip.Ip, "-p", proto, "--dport", strconv.Itoa(p.Port), "-j", actionOutsideList)
 	}
 	return nil
 }

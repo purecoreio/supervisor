@@ -237,6 +237,7 @@ func (m *Machine) getLoginString() (params url.Values, err error) {
 	if err != nil {
 		return nil, err
 	}
+	commonVirtual := []string{"lo", "veth", "docker", "br"}
 	for _, inet := range interfaces {
 		addressList, err := inet.Addrs()
 		if err != nil {
@@ -252,17 +253,30 @@ func (m *Machine) getLoginString() (params url.Values, err error) {
 				continue
 			}
 
-			parsedIp, _, err := net.ParseCIDR(inetAddr.String())
-			if err != nil {
-				return nil, err
+			isVirtual := false
+			for _, virtualPrefix := range commonVirtual {
+				if strings.HasPrefix(inet.Name, virtualPrefix) {
+					isVirtual = true
+					break
+				}
 			}
+			if isVirtual {
+				continue
+			}
+
+			ipNet, ok := inetAddr.(*net.IPNet)
+			if !ok {
+				continue
+			}
+
+			parsedIp := ipNet.IP
 
 			if parsedIp.IsLoopback() {
 				continue
 			}
 
 			inets = append(inets, ip.Ip{
-				Ip:        inetAddr.String(),
+				Ip:        parsedIp.String(),
 				Adapter:   inet.Name,
 				Available: true,
 			})

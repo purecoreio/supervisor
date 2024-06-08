@@ -204,39 +204,41 @@ func (h *Handler) HandleEvent(action event.Type, content string, broadcast bool)
 			return err
 		}
 	}
-	for _, targetListener := range *targetListeners {
-		entry := event.Entry{
-			Listener:  targetListener.Id,
-			Type:      action,
-			Container: h.ContainerId,
-			Content:   content,
-		}
-		if entry.Type == event.Status {
-			inspect, err := h.Client.ContainerInspect(context.Background(), h.ContainerName)
-			if err != nil {
-				return err
-			}
-			status := event.StatusUpdate{}
-			encodedStatus, err := status.FromContainerState(inspect.State).Encode()
-			if err != nil {
-				return err
-			}
-			entry.Content = encodedStatus
-			if status.Running {
-				if len(h.Logs) > 0 {
-					go func() {
-						_ = h.LogStream.StreamLogs()
-					}()
-				}
-				if len(h.Load) > 0 {
-					go func() {
-						_ = h.LoadStream.StreamLoad()
-					}()
-				}
-			}
-		}
-		*h.eventPool <- entry
-		h.logger().Infof("forwarded entry %s, %s", action, content)
+	targetIds := make([]string, 0)
+	for _, listener := range *targetListeners {
+		targetIds = append(targetIds, listener.Id)
 	}
+	entry := event.Entry{
+		Listeners: targetIds,
+		Type:      action,
+		Container: h.ContainerId,
+		Content:   content,
+	}
+	if entry.Type == event.Status {
+		inspect, err := h.Client.ContainerInspect(context.Background(), h.ContainerName)
+		if err != nil {
+			return err
+		}
+		status := event.StatusUpdate{}
+		encodedStatus, err := status.FromContainerState(inspect.State).Encode()
+		if err != nil {
+			return err
+		}
+		entry.Content = encodedStatus
+		if status.Running {
+			if len(h.Logs) > 0 {
+				go func() {
+					_ = h.LogStream.StreamLogs()
+				}()
+			}
+			if len(h.Load) > 0 {
+				go func() {
+					_ = h.LoadStream.StreamLoad()
+				}()
+			}
+		}
+	}
+	*h.eventPool <- entry
+	h.logger().Infof("forwarded entry %s, %s", action, content)
 	return err
 }

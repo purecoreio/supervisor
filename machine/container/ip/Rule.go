@@ -7,8 +7,8 @@ import (
 )
 
 type Rule struct {
-	SourceIp     *string
-	SourceDomain *string
+	SourceIp     *string `json:"sourceIp,omitempty"`
+	SourceDomain *string `json:"sourceDomain,omitempty"`
 	resolvedIps  []net.IP
 	lastUpdate   time.Time
 	checkMutex   sync.Mutex
